@@ -4,6 +4,30 @@
   <meta charset="utf-8" />
   <title>eMigrant — Старт</title>
   <meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <!-- 🔁 МГНОВЕННЫЙ РЕДИРЕКТ ДО РЕНДЕРА -->
+  <script>
+    (function () {
+      try {
+        var done = JSON.parse(localStorage.getItem('onboarding_done') || 'false');
+        var hasQ = !!localStorage.getItem('questionnaire');
+        if (done && hasQ) {
+          // Не даём ничего отрисовать и сразу уходим на чеклист
+          document.documentElement.style.backgroundColor = '#0f1115'; // тёмный фон, без вспышки
+          location.replace('./checklist.html');
+          return;
+        }
+      } catch (e) { /* игнор */ }
+      // Если редиректа не будет — разрешим показ страницы (см. стиль ниже)
+      document.documentElement.setAttribute('data-show', '1');
+    })();
+  </script>
+
+  <!-- Скрываем body до решения о редиректе, чтобы не мигал контент -->
+  <style>
+    html:not([data-show]) body { opacity: 0; }
+  </style>
+
   <script src="https://telegram.org/js/telegram-web-app.js"></script>
   <link rel="stylesheet" href="./styles.css" />
   <style>
@@ -29,7 +53,9 @@
 
     <div class="card">
       <div class="h2" data-i18n="start_title">Начнём с короткой анкеты</div>
-      <p class="p" data-i18n="start_p">Ответы помогут подобрать подходящий путь легализации и собрать персональный чек-лист документов.</p>
+      <p class="p" data-i18n="start_p">
+        Ответы помогут подобрать подходящий путь легализации и собрать персональный чек-лист документов.
+      </p>
       <hr/>
       <div class="footer">
         <a class="btn full" href="./questionnaire.html" data-i18n="start_cta">Начать анкету</a>
@@ -43,16 +69,6 @@
   const $ = (s, r=document)=>r.querySelector(s);
   const $$ = (s, r=document)=>Array.from(r.querySelectorAll(s));
   const storage = { get(k,d=null){try{return JSON.parse(localStorage.getItem(k))??d}catch{return d}}, set(k,v){localStorage.setItem(k,JSON.stringify(v))} };
-
-  // 🔁 Автологин в чеклист для завершивших анкету
-  (function earlyRedirect(){
-    const done = storage.get('onboarding_done', false);
-    const hasQ = !!storage.get('questionnaire', null);
-    if (done && hasQ) {
-      // чтобы не было «мигания» стартового экрана
-      location.replace('./checklist.html');
-    }
-  })();
 
   // Мини-i18n
   const i18n = {
