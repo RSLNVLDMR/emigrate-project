@@ -68,10 +68,17 @@
   "translator_to": "На мову",
   "translator_placeholder": "Вставте текст для перекладу…",
   "translator_do": "Перекласти",
+  "translator_err_empty": "Введіть текст для перекладу",
+
   "consult_title": "Зв'язатися з консультантом",
   "consult_topic": "Коротко опишіть запит",
   "consult_msg": "Повідомлення/деталі",
   "consult_open_chat": "Відкрити чат у Telegram",
+  "consult_note": "Ми сформуємо чернетку звернення й відкриємо чат із ботом.",
+  "consult_topic_ph": "Наприклад: продовження карти, зміна роботи",
+  "consult_msg_ph": "Опишіть ситуацію...",
+  "consult_err_topic": "Опишіть ваш запит",
+
   "legal_title": "Політика конфіденційності та умови",
 
   "path.pobyt_study": "Pobyt czasowy — навчання",
