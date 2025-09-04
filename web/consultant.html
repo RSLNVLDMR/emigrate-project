@@ -1,0 +1,54 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8" />
+  <title>Консультант — eMigrant</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <script src="https://telegram.org/js/telegram-web-app.js"></script>
+  <link rel="stylesheet" href="./styles.css" />
+</head>
+<body>
+<div class="screen">
+  <div class="container">
+    <div class="header">
+      <div class="h1" data-i18n="consult_title">Связаться с консультантом</div>
+      <div class="lang">
+        <button data-lang="ru" class="active">RU</button><button data-lang="ua">UA</button><button data-lang="by">BY</button>
+      </div>
+    </div>
+
+    <label class="col"><span data-i18n="consult_topic">Коротко опишите запрос</span><input id="topic" class="input" placeholder="Например: продление карты, смена работы"/></label>
+    <label class="col"><span data-i18n="consult_msg">Сообщение/детали</span><textarea id="msg" class="input" placeholder="Опишите ситуацию..."></textarea></label>
+
+    <div class="footer">
+      <a id="open" class="btn full" href="#" data-i18n="consult_open_chat">Открыть чат в Telegram</a>
+      <small class="muted">Мы сформируем черновик обращения и откроем чат с ботом.</small>
+    </div>
+  </div>
+
+  <div class="tabs">
+    <a class="tab" href="./translator.html" data-i18n="nav_translator">Переводчик</a>
+    <a class="tab" href="./checklist.html" data-i18n="nav_checklist">Чеклист</a>
+    <a class="tab" href="./consultant.html" data-i18n="nav_consultant">Консультант</a>
+  </div>
+</div>
+<script type="module">
+  import { i18n, initLangSwitcher, $ } from './utils.js';
+  import { initTelegram, CFG } from './auth.js';
+  import { createConsultDraft } from './api.js';
+
+  initTelegram();
+  await i18n.load(localStorage.getItem('lang')||'ru');
+  initLangSwitcher();
+
+  $('#open').onclick = async (e)=>{
+    const topic = $('#topic').value.trim(); const message = $('#msg').value.trim();
+    if(!topic){ alert('Опишите ваш запрос'); e.preventDefault(); return; }
+    const {id} = await createConsultDraft({topic, message});
+    const payload = encodeURIComponent(JSON.stringify({topic, message, id}));
+    const url = `tg://resolve?domain=${CFG.BOT_USERNAME}&start=consult_${payload}`;
+    e.currentTarget.setAttribute('href', url);
+  };
+</script>
+</body>
+</html>
