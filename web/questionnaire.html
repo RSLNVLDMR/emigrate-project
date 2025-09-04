@@ -7,8 +7,13 @@
   <script src="https://telegram.org/js/telegram-web-app.js"></script>
   <link rel="stylesheet" href="./styles.css" />
   <style>
-    /* подстраховка на случай наложений — делаем кнопки языка кликабельными наверняка */
-    .lang button{position:relative;z-index:2}
+    /* Делает элементы гарантированно кликабельными в WebView */
+    .screen{position:relative}
+    .container{position:relative; z-index:1; pointer-events:auto}
+    .footer{position:sticky; bottom:0; z-index:3; pointer-events:auto}
+    .lang{position:relative; z-index:4}
+    .lang button{position:relative; z-index:5}
+    button, .btn, select, .input { pointer-events:auto; touch-action:manipulation; -webkit-tap-highlight-color:transparent }
   </style>
 </head>
 <body>
@@ -78,12 +83,8 @@
       <label class="col">
         <span>Уровень заработка</span>
         <select id="income_level" class="input">
-          <!-- опции подставляются динамически от воеводства -->
+          <!-- опции подставятся при загрузке -->
         </select>
-        <small class="muted">
-          Для M1 используем общенациональные вилки: ниже минимальной / около минимальной / 1–1.5× / 1.5–2.5× / &gt;2.5×.
-          Позже подставим точные пороги и нюансы по основаниям.
-        </small>
       </label>
 
       <div id="student_extra" class="card hidden">
@@ -114,8 +115,8 @@
 
     <div class="footer">
       <div class="row">
-        <button id="prev" class="btn secondary" data-i18n="q_prev">Назад</button>
-        <button id="next" class="btn full" data-i18n="q_preview">Просмотреть ответы</button>
+        <button id="prev" type="button" class="btn secondary" data-i18n="q_prev">Назад</button>
+        <button id="next" type="button" class="btn full" data-i18n="q_preview">Просмотреть ответы</button>
       </div>
     </div>
   </div>
@@ -126,30 +127,15 @@
   import { initTelegram } from './auth.js';
   import { saveQuestionnaire } from './api.js';
 
-  // инициализация
-  function initIncomeOptions(){
+  function setIncomeOptions(){
     const level = document.getElementById('income_level');
     level.innerHTML = `
-      <option value="below_min">Ниже минимальной</option>
-      <option value="around_min">Около минимальной</option>
-      <option value="min_to_1_5">От минимальной до 1.5×</option>
-      <option value="1_5_to_2_5">1.5× — 2.5×</option>
-      <option value="above_2_5">Выше 2.5×</option>
+      <option value="lt_4700">меньше 4700 zł</option>
+      <option value="gt_4700">больше 4700 zł</option>
     `;
   }
-  function onVoivodeshipChange(){
-    // На будущее: здесь можем менять набор вилок под конкретное воеводство.
-    initIncomeOptions();
-  }
 
-  async function boot(){
-    initTelegram();
-    await i18n.load(localStorage.getItem('lang')||'ru');
-    initLangSwitcher();
-
-    // восстановим активное состояние кнопок языка корректно
-    document.documentElement.setAttribute('lang', i18n.lang);
-
+  function bindDynamic(){
     const statusEl = $('#status');
     const studBox = $('#student_extra');
     const nsBox = $('#nostatus_extra');
@@ -158,16 +144,12 @@
       studBox.classList.toggle('hidden', statusEl.value!=='student');
       nsBox.classList.toggle('hidden', statusEl.value!=='no_status');
     };
+    statusEl.removeEventListener?.('change', toggleExtras);
     statusEl.addEventListener('change', toggleExtras);
     toggleExtras();
 
-    // зависимые поля
-    document.getElementById('voivodeship').addEventListener('change', onVoivodeshipChange);
-    onVoivodeshipChange();
-
     // кнопки
     $('#prev').onclick = ()=> history.back();
-
     $('#next').onclick = ()=>{
       const first = $('#first_name').value.trim();
       const last  = $('#last_name').value.trim();
@@ -191,7 +173,6 @@
           start: $('#stud_start').value.trim(),
           end: $('#stud_end').value.trim()
         };
-        // даты в студент-блоке — опциональны; если указали, проверим формат
         if(q.student.start && !isDDMMYYYY(q.student.start)){ alert('Дата начала: формат ДД.ММ.ГГГГ'); return; }
         if(q.student.end && !isDDMMYYYY(q.student.end)){ alert('Дата окончания: формат ДД.ММ.ГГГГ'); return; }
       }
@@ -206,15 +187,31 @@
       saveQuestionnaire(q);
       location.href = './questionnaire-preview.html';
     };
-
-    // фикс для возврата «назад» из bfcache
-    window.addEventListener('pageshow', async ()=>{
-      await i18n.load(localStorage.getItem('lang')||'ru');
-      initLangSwitcher();
-    });
   }
 
-  boot();
+  async function boot(){
+    initTelegram();
+    // применяем язык, выбранный на первом экране
+    await i18n.load(localStorage.getItem('lang')||'ru');
+    initLangSwitcher();
+    document.documentElement.setAttribute('lang', i18n.lang);
+
+    // заполняем уровни дохода (сейчас: 2 опции)
+    setIncomeOptions();
+
+    // биндим всё кликабельное
+    bindDynamic();
+  }
+
+  await boot();
+
+  // Повторная инициализация после возврата из истории (bfcache)
+  window.addEventListener('pageshow', async ()=>{
+    await i18n.load(localStorage.getItem('lang')||'ru');
+    initLangSwitcher();
+    setIncomeOptions();
+    bindDynamic();
+  });
 </script>
 </body>
 </html>
