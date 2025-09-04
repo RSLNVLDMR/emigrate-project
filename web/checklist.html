@@ -11,14 +11,18 @@
 <div class="screen">
   <div class="container">
     <div class="header">
-      <div class="col">
+      <div class="col" style="flex:1">
         <div class="h1" data-i18n="cl_title">Ваш чеклист</div>
-        <div class="row" style="gap:8px">
+
+        <!-- Заголовок прогресса и процент в одной строке -->
+        <div class="row between" style="margin-top:4px">
           <span class="muted" data-i18n="cl_progress">Прогресс</span>
-          <div class="progress" style="flex:1"><span id="bar"></span></div>
           <span id="pct" class="badge">0%</span>
         </div>
+        <!-- А сам бар — отдельной строкой на 100% ширины -->
+        <div class="progress full"><span id="bar"></span></div>
       </div>
+
       <div class="lang">
         <button data-lang="ru" class="active">RU</button>
         <button data-lang="ua">UA</button>
@@ -43,7 +47,7 @@
   const $$ = (s,r=document)=>Array.from(r.querySelectorAll(s));
   const storage = { get(k,d=null){try{return JSON.parse(localStorage.getItem(k))??d}catch{return d}}, set(k,v){localStorage.setItem(k,JSON.stringify(v))} };
 
-  // --- i18n (без импортов) ---
+  // i18n
   const i18n = {
     lang: storage.get('lang','ru'),
     dict:{},
@@ -53,27 +57,15 @@
         const res = await fetch(`./i18n/${use}.json`, {cache:'no-store'});
         if(res.ok){ i18n.dict = await res.json(); i18n.lang = use; storage.set('lang',use); }
       }catch(e){}
-      applyTexts();
-      highlightLang();
-      render(); // перечеркнуть список в новом языке
+      applyTexts(); highlightLang(); render();
     }
   };
   const t = (k)=> i18n.dict[k] || k;
-  function applyTexts(){
-    $$('[data-i18n]').forEach(el=>{
-      const key = el.getAttribute('data-i18n');
-      if(i18n.dict[key]) el.textContent = i18n.dict[key];
-    });
-    document.documentElement.setAttribute('lang', i18n.lang);
-  }
-  function highlightLang(){
-    $$('.lang button').forEach(b=> b.classList.toggle('active', b.dataset.lang===i18n.lang));
-  }
-  function bindLang(){
-    $$('.lang button').forEach(b=> b.onclick = ()=> i18n.load(b.dataset.lang));
-  }
+  function applyTexts(){ $$('[data-i18n]').forEach(el=>{ const key=el.getAttribute('data-i18n'); if(i18n.dict[key]) el.textContent=i18n.dict[key]; }); document.documentElement.setAttribute('lang', i18n.lang); }
+  function highlightLang(){ $$('.lang button').forEach(b=> b.classList.toggle('active', b.dataset.lang===i18n.lang)); }
+  function bindLang(){ $$('.lang button').forEach(b=> b.onclick = ()=> i18n.load(b.dataset.lang)); }
 
-  // --- решение пути и заготовки чеклистов (с i18n-ключами) ---
+  // путь и шаблоны
   function decidePath(q){
     if(q?.status==='student') return 'pobyt_study';
     if(q?.status==='no_status') return 'regularize';
@@ -114,39 +106,28 @@
       {slug:'employer-change', i18n:'item.employer_change'}
     ]
   };
-
   function moduleLink(slug){
     if(slug==='student-zaswiadczenie') return './module-student-zaswiadczenie.html';
     if(slug==='choose-basis') return './module-no-status-basis.html';
     return '#todo';
   }
+  function computeProgress(items){ const done = items.filter(x=>x.done).length; return Math.round((done / Math.max(items.length,1)) * 100); }
 
-  function computeProgress(items){
-    const done = items.filter(x=>x.done).length;
-    return Math.round((done / Math.max(items.length,1)) * 100);
-  }
-
-  // --- состояние страницы ---
+  // состояние
   let pathId = 'regularize';
   let items = [];
 
   function ensureChecklist(){
     const key = 'checklist_'+pathId;
     const stored = storage.get(key, null);
-    if(stored){
-      items = stored;
-      return;
-    }
-    // создать по шаблону
+    if(stored){ items = stored; return; }
     items = (CHECKLIST_TEMPLATES[pathId]||[]).map(x=>({ ...x, done:false }));
     storage.set(key, items);
   }
 
   function render(){
-    // название пути
     $('#path_name').textContent = t(PATH_TITLE_KEY[pathId] || pathId);
 
-    // список
     const list = $('#list');
     list.innerHTML = '';
     items.forEach((it, idx)=>{
@@ -164,12 +145,10 @@
       list.appendChild(row);
     });
 
-    // прогресс
     const pct = computeProgress(items);
     $('#bar').style.width = pct + '%';
     $('#pct').textContent = pct + '%';
 
-    // клики по чекбоксам
     $$('.checkbox').forEach(cb=>{
       cb.onclick = ()=>{
         const i = Number(cb.dataset.idx);
@@ -180,11 +159,7 @@
     });
   }
 
-  function initTG(){
-    const tg = window.Telegram && window.Telegram.WebApp;
-    if(!tg) return;
-    tg.expand(); tg.ready();
-  }
+  function initTG(){ const tg = window.Telegram && window.Telegram.WebApp; if(!tg) return; tg.expand(); tg.ready(); }
 
   async function boot(){
     initTG();
@@ -192,7 +167,7 @@
     await i18n.load(storage.get('lang','ru'));
 
     const q = storage.get('questionnaire', {});
-    pathId = decidePath(q);
+    pathId = storage.get('last_path', null) || decidePath(q);
     ensureChecklist();
     render();
   }
