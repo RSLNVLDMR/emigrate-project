@@ -7,10 +7,9 @@
   <script src="https://telegram.org/js/telegram-web-app.js"></script>
   <link rel="stylesheet" href="./styles.css" />
   <style>
-    /* Страховка от «не кликается» в WebView */
-    .screen,.container,.footer,.lang,button,.btn,select,input,textarea { pointer-events:auto; }
-    .lang{position:relative; z-index:5}
-    .footer{position:sticky; bottom:0; z-index:4}
+    .lang{position:relative;z-index:5}
+    .footer{position:sticky;bottom:0;z-index:4}
+    button,.btn,select,input,textarea{pointer-events:auto;touch-action:manipulation;-webkit-tap-highlight-color:transparent}
   </style>
 </head>
 <body>
@@ -27,36 +26,27 @@
 
     <div class="col">
       <label class="col">
-        <span>Имя (латиницей)</span>
+        <span data-i18n="q_name">Имя (латиницей)</span>
         <input id="first_name" class="input" placeholder="Ivan" />
       </label>
+
       <label class="col">
-        <span>Фамилия (латиницей)</span>
+        <span data-i18n="q_surname">Фамилия (латиницей)</span>
         <input id="last_name" class="input" placeholder="Ivanov" />
       </label>
 
       <label class="col">
         <span data-i18n="q_citizenship">Гражданство</span>
-        <select id="citizenship" class="input">
-          <option value="ua">Украина</option>
-          <option value="by">Беларусь</option>
-          <option value="ru">Россия</option>
-        </select>
+        <select id="citizenship" class="input"></select>
       </label>
 
       <label class="col">
         <span data-i18n="q_status">Текущий статус</span>
-        <select id="status" class="input">
-          <option value="pesel_ukr">PESEL-UKR</option>
-          <option value="asylum">Беженство / международная защита</option>
-          <option value="karta_czasowa">Karta pobytu czasowego (действующая)</option>
-          <option value="student">Учащийся</option>
-          <option value="no_status">Нет статуса</option>
-        </select>
+        <select id="status" class="input"></select>
       </label>
 
       <label class="col">
-        <span>Воеводство</span>
+        <span data-i18n="q_voivodeship">Воеводство</span>
         <select id="voivodeship" class="input">
           <option value="dolnoslaskie">Dolnośląskie</option>
           <option value="kujawsko_pomorskie">Kujawsko-Pomorskie</option>
@@ -78,34 +68,32 @@
       </label>
 
       <label class="col">
-        <span>Уровень заработка</span>
-        <select id="income_level" class="input">
-          <option value="lt_4700">меньше 4700 zł</option>
-          <option value="gt_4700">больше 4700 zł</option>
-        </select>
+        <span data-i18n="q_income">Уровень заработка</span>
+        <select id="income_level" class="input"></select>
       </label>
 
       <div id="student_extra" class="card hidden">
-        <div class="h2">Данные для учащегося</div>
-        <label class="col"><span>Учебное заведение</span><input id="stud_inst" class="input" placeholder="UW / PW / ..."/></label>
-        <label class="col"><span>Документ</span>
+        <div class="h2" data-i18n="q_student_block">Данные для учащегося</div>
+        <label class="col"><span data-i18n="q_student_inst">Учебное заведение</span><input id="stud_inst" class="input" placeholder="UW / PW / …"/></label>
+        <label class="col"><span data-i18n="q_student_doc">Документ</span>
           <select id="stud_doc" class="input">
-            <option value="o_przyjeciu">Zaświadczenie o przyjęciu</option>
-            <option value="o_studiowaniu">Zaświadczenie o studiowaniu</option>
+            <option value="o_przyjeciu" data-i18n="q_student_doc_adm">Zaświadczenie o przyjęciu</option>
+            <option value="o_studiowaniu" data-i18n="q_student_doc_study">Zaświadczenie o studiowaniu</option>
           </select>
         </label>
         <div class="row">
-          <label class="col" style="flex:1"><span>Начало (ДД.ММ.ГГГГ)</span><input id="stud_start" class="input" placeholder="01.10.2025"/></label>
-          <label class="col" style="flex:1"><span>Окончание (ДД.ММ.ГГГГ)</span><input id="stud_end" class="input" placeholder="30.06.2026"/></label>
+          <label class="col" style="flex:1"><span data-i18n="q_student_start">Начало (ДД.ММ.ГГГГ)</span><input id="stud_start" class="input" placeholder="01.10.2025"/></label>
+          <label class="col" style="flex:1"><span data-i18n="q_student_end">Окончание (ДД.ММ.ГГГГ)</span><input id="stud_end" class="input" placeholder="30.06.2026"/></label>
         </div>
       </div>
 
       <div id="nostatus_extra" class="card hidden">
-        <div class="h2">Если нет статуса</div>
-        <label class="col"><span>Дата последнего въезда (ДД.ММ.ГГГГ)</span><input id="ns_entry" class="input" placeholder="15.08.2025"/></label>
-        <label class="col"><span>Есть оффер на работу?</span>
+        <div class="h2" data-i18n="q_ns_block">Если нет статуса</div>
+        <label class="col"><span data-i18n="q_ns_entry">Дата последнего въезда (ДД.ММ.ГГГГ)</span><input id="ns_entry" class="input" placeholder="15.08.2025"/></label>
+        <label class="col"><span data-i18n="q_ns_offer">Есть оффер на работу?</span>
           <select id="ns_offer" class="input">
-            <option value="no">Нет</option><option value="yes">Да</option>
+            <option value="no" data-i18n="opt_no">Нет</option>
+            <option value="yes" data-i18n="opt_yes">Да</option>
           </select>
         </label>
       </div>
@@ -113,7 +101,6 @@
 
     <div class="footer">
       <div class="row">
-        <button id="prev" type="button" class="btn secondary" data-i18n="q_prev">Назад</button>
         <button id="next" type="button" class="btn full" data-i18n="q_preview">Просмотреть ответы</button>
       </div>
     </div>
@@ -122,70 +109,92 @@
 
 <script>
 (function(){
-  // --- helpers (встроенные, без импортов) ---
-  const $ = (sel, root=document)=> root.querySelector(sel);
-  const $$ = (sel, root=document)=> Array.from(root.querySelectorAll(sel));
+  const $ = (s, r=document)=>r.querySelector(s);
+  const $$ = (s, r=document)=>Array.from(r.querySelectorAll(s));
   const storage = {
-    get(k, d=null){ try{return JSON.parse(localStorage.getItem(k)) ?? d}catch{ return d } },
-    set(k, v){ localStorage.setItem(k, JSON.stringify(v)) }
+    get(k,d=null){try{return JSON.parse(localStorage.getItem(k))??d}catch{return d}},
+    set(k,v){localStorage.setItem(k,JSON.stringify(v))}
   };
-  const isLatinName = s => /^[A-Za-z\s\-']{2,}$/.test(String(s||'').trim());
-  const isDDMMYYYY = s => /^([0-2]\d|3[01])\.(0\d|1[0-2])\.(19|20)\d{2}$/.test(String(s||'').trim());
 
-  // --- i18n минималка ---
   const i18n = {
     lang: storage.get('lang','ru'),
-    dict: {},
+    dict:{},
     async load(lang){
+      let use = lang || i18n.lang;
       try{
-        const res = await fetch(`./i18n/${lang}.json`, {cache:'no-store'});
-        if(res.ok){ i18n.dict = await res.json(); i18n.lang = lang; storage.set('lang', lang); }
-      }catch(e){ /* fallback: RU по умолчанию */ }
-      apply();
+        const res = await fetch(`./i18n/${use}.json`, {cache:'no-store'});
+        if(res.ok) { i18n.dict = await res.json(); i18n.lang = use; storage.set('lang',use); }
+      }catch(e){}
+      applyTexts();
+      mountSelects(); // чтобы подписи и варианты локализовались
+      highlightLang();
     }
   };
-  function apply(){
+  const t = (k)=> i18n.dict[k] || k;
+
+  function applyTexts(){
     $$('[data-i18n]').forEach(el=>{
-      const key = el.getAttribute('data-i18n');
-      if(i18n.dict[key]) el.textContent = i18n.dict[key];
+      const k = el.getAttribute('data-i18n');
+      if(i18n.dict[k]) el.textContent = i18n.dict[k];
     });
-    // подсветка активной кнопки языка
-    $$('.lang button').forEach(b=> b.classList.toggle('active', b.dataset.lang === i18n.lang));
     document.documentElement.setAttribute('lang', i18n.lang);
+  }
+  function highlightLang(){
+    $$('.lang button').forEach(b=> b.classList.toggle('active', b.dataset.lang===i18n.lang));
   }
   function bindLang(){
     $$('.lang button').forEach(b=>{
-      b.onclick = async ()=> { await i18n.load(b.dataset.lang); };
+      b.onclick = ()=> i18n.load(b.dataset.lang);
     });
   }
 
-  // --- Telegram WebApp init (минимально) ---
-  (function initTelegram(){
-    const tg = window.Telegram && window.Telegram.WebApp;
-    if(!tg) return;
-    tg.expand(); tg.ready();
-    tg.onEvent && tg.onEvent('themeChanged', ()=>{/* темы handled CSS */});
-  })();
+  function mountSelects(){
+    // Citizenship
+    const cit = $('#citizenship');
+    cit.innerHTML = `
+      <option value="ua">${t('cit.ua')}</option>
+      <option value="by">${t('cit.by')}</option>
+      <option value="ru">${t('cit.ru')}</option>
+    `;
 
-  // --- логика анкеты ---
+    // Status
+    const st = $('#status');
+    st.innerHTML = `
+      <option value="pesel_ukr">${t('status.pesel_ukr')}</option>
+      <option value="asylum">${t('status.asylum')}</option>
+      <option value="karta_czasowa">${t('status.karta')}</option>
+      <option value="student">${t('status.student')}</option>
+      <option value="no_status">${t('status.no_status')}</option>
+    `;
+
+    // Income
+    const inc = $('#income_level');
+    inc.innerHTML = `
+      <option value="lt_4700">${t('income.lt4700')}</option>
+      <option value="gt_4700">${t('income.gt4700')}</option>
+    `;
+  }
+
+  // validation
+  const isLatinName = s => /^[A-Za-z\s\-']{2,}$/.test(String(s||'').trim());
+  const isDDMMYYYY = s => /^([0-2]\d|3[01])\.(0\d|1[0-2])\.(19|20)\d{2}$/.test(String(s||'').trim());
+
   function toggleExtras(){
-    const st = $('#status').value;
-    $('#student_extra').classList.toggle('hidden', st!=='student');
-    $('#nostatus_extra').classList.toggle('hidden', st!=='no_status');
+    const v = $('#status').value;
+    $('#student_extra').classList.toggle('hidden', v!=='student');
+    $('#nostatus_extra').classList.toggle('hidden', v!=='no_status');
   }
 
   function bindControls(){
     $('#status').addEventListener('change', toggleExtras);
     toggleExtras();
 
-    // кнопки
-    $('#prev').onclick = ()=> history.back();
     $('#next').onclick = ()=>{
       const first = $('#first_name').value.trim();
       const last  = $('#last_name').value.trim();
       if(!isLatinName(first) || !isLatinName(last)){
-        alert('Имя/фамилия: только латиница, минимум 2 символа'); return;
-        }
+        alert(t('err_name_latin')); return;
+      }
 
       const q = {
         first, last,
@@ -202,15 +211,15 @@
           start: $('#stud_start').value.trim(),
           end: $('#stud_end').value.trim()
         };
-        if(q.student.start && !isDDMMYYYY(q.student.start)){ alert('Дата начала: формат ДД.ММ.ГГГГ'); return; }
-        if(q.student.end && !isDDMMYYYY(q.student.end)){ alert('Дата окончания: формат ДД.ММ.ГГГГ'); return; }
+        if(q.student.start && !isDDMMYYYY(q.student.start)){ alert(t('err_date_format')); return; }
+        if(q.student.end && !isDDMMYYYY(q.student.end)){ alert(t('err_date_format')); return; }
       }
       if(q.status==='no_status'){
         q.no_status = {
           last_entry: $('#ns_entry').value.trim(),
           has_offer: $('#ns_offer').value==='yes'
         };
-        if(q.no_status.last_entry && !isDDMMYYYY(q.no_status.last_entry)){ alert('Дата последнего въезда: формат ДД.ММ.ГГГГ'); return; }
+        if(q.no_status.last_entry && !isDDMMYYYY(q.no_status.last_entry)){ alert(t('err_date_format')); return; }
       }
 
       storage.set('questionnaire', q);
@@ -218,16 +227,19 @@
     };
   }
 
-  // --- загрузка страницы/языка и бинды ---
-  async function boot(){
-    await i18n.load(storage.get('lang','ru'));
-    bindLang();
-    bindControls();
+  function initTG(){
+    const tg = window.Telegram && window.Telegram.WebApp;
+    if(!tg) return;
+    tg.expand(); tg.ready();
   }
 
-  // при обычной загрузке
+  async function boot(){
+    initTG();
+    bindLang();
+    await i18n.load(storage.get('lang','ru'));
+    bindControls();
+  }
   document.addEventListener('DOMContentLoaded', boot);
-  // при возврате из истории (bfcache)
   window.addEventListener('pageshow', boot);
 })();
 </script>
