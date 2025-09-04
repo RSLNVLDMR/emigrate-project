@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8" />
+  <title>eMigrant — Старт</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <script src="https://telegram.org/js/telegram-web-app.js"></script>
+  <link rel="stylesheet" href="./styles.css" />
+</head>
+<body>
+<div class="screen">
+  <div class="container">
+    <div class="header">
+      <div class="col">
+        <div class="h1" data-i18n="app_title">eMigrant — помощь с легализацией в Польше</div>
+        <small class="muted" data-i18n="disclaimer">Не является юридической консультацией...</small>
+      </div>
+      <div class="lang">
+        <button data-lang="ru" class="active">RU</button>
+        <button data-lang="ua">UA</button>
+        <button data-lang="by">BY</button>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="h2" data-i18n="start_title">Начнём с короткой анкеты</div>
+      <p class="p" data-i18n="start_p">Ответы помогут подобрать...</p>
+      <hr/>
+      <div class="footer">
+        <a class="btn full" href="./questionnaire.html" data-i18n="start_cta">Начать анкету</a>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script type="module">
+  import { i18n, initLangSwitcher } from './utils.js';
+  import { initTelegram } from './auth.js';
+  window.BOT_USERNAME = 'your_bot_username_here'; /* set real bot username */
+  initTelegram();
+  await i18n.load(localStorage.getItem('lang')||'ru');
+  initLangSwitcher();
+</script>
+</body>
+</html>
