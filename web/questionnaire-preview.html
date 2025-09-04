@@ -12,45 +12,118 @@
   <div class="container">
     <div class="header">
       <div class="h1" data-i18n="preview_title">Проверьте ответы</div>
-      <div class="badge">✎ inline edit позже (M2)</div>
+      <div class="lang">
+        <button data-lang="ru" class="active">RU</button>
+        <button data-lang="ua">UA</button>
+        <button data-lang="by">BY</button>
+      </div>
     </div>
 
     <div id="summary" class="card"></div>
 
     <div class="footer">
       <button id="continue" class="btn full" data-i18n="preview_continue">Продолжить</button>
-      <small class="muted">Кнопка «Продолжить» <b>не</b> запускает PDF/AI. Она ведёт на главный экран с чеклистом.</small>
+      <small class="muted" data-i18n="preview_note">Кнопка «Продолжить» не запускает PDF/AI. Она ведёт на главный экран с чеклистом.</small>
     </div>
   </div>
 </div>
 
-<script type="module">
-  import { i18n, $, initLangSwitcher } from './utils.js';
-  import { getQuestionnaire } from './api.js';
-  import { initTelegram, CFG } from './auth.js';
+<script>
+(function(){
+  const $ = (s, r=document)=>r.querySelector(s);
+  const $$ = (s, r=document)=>Array.from(r.querySelectorAll(s));
+  const storage = { get(k,d=null){try{return JSON.parse(localStorage.getItem(k))??d}catch{return d}}, set(k,v){localStorage.setItem(k,JSON.stringify(v))} };
 
-  initTelegram();
-  await i18n.load(localStorage.getItem('lang')||'ru');
-  initLangSwitcher?.();
+  const i18n = {
+    lang: storage.get('lang','ru'),
+    dict:{},
+    async load(lang){
+      const use = lang || i18n.lang;
+      try{
+        const res = await fetch(`./i18n/${use}.json`, {cache:'no-store'});
+        if(res.ok){ i18n.dict = await res.json(); i18n.lang = use; storage.set('lang',use); }
+      }catch(e){}
+      apply();
+      highlightLang();
+      renderSummary();
+    }
+  };
+  const t = (k)=> i18n.dict[k] || k;
 
-  const q = getQuestionnaire();
-  const s = $('#summary');
-  if(!q || !q.first){ s.innerHTML = '<p class="p">Анкета пустая. Вернитесь и заполните.</p>'; }
-  else {
+  function apply(){
+    $$('[data-i18n]').forEach(el=>{
+      const k = el.getAttribute('data-i18n');
+      if(i18n.dict[k]) el.textContent = i18n.dict[k];
+    });
+    document.documentElement.setAttribute('lang', i18n.lang);
+  }
+  function highlightLang(){
+    $$('.lang button').forEach(b=> b.classList.toggle('active', b.dataset.lang===i18n.lang));
+  }
+  function bindLang(){
+    $$('.lang button').forEach(b=> b.onclick = ()=> i18n.load(b.dataset.lang));
+  }
+
+  function labelCit(v){
+    if(v==='ua') return t('cit.ua');
+    if(v==='by') return t('cit.by');
+    if(v==='ru') return t('cit.ru');
+    return v;
+  }
+  function labelStatus(v){
+    if(v==='pesel_ukr') return t('status.pesel_ukr');
+    if(v==='asylum') return t('status.asylum');
+    if(v==='karta_czasowa') return t('status.karta');
+    if(v==='student') return t('status.student');
+    if(v==='no_status') return t('status.no_status');
+    return v;
+  }
+  function labelIncome(v){
+    if(v==='lt_4700') return t('income.lt4700');
+    if(v==='gt_4700') return t('income.gt4700');
+    return v;
+  }
+
+  function renderSummary(){
+    const q = storage.get('questionnaire', null);
+    const s = $('#summary');
+    if(!q){
+      s.innerHTML = `<p class="p">—</p>`;
+      return;
+    }
     s.innerHTML = `
       <div class="col">
-        <div class="row"><b>Имя:</b> <span>${q.first}</span> <a href="./questionnaire.html" class="badge">✎</a></div>
-        <div class="row"><b>Фамилия:</b> <span>${q.last}</span> <a href="./questionnaire.html" class="badge">✎</a></div>
-        <div class="row"><b>Дата рождения:</b> <span>${q.birth}</span> <a href="./questionnaire.html" class="badge">✎</a></div>
-        <div class="row"><b>Гражданство:</b> <span>${q.citizenship}</span> <a href="./questionnaire.html" class="badge">✎</a></div>
-        <div class="row"><b>Статус:</b> <span>${q.status}</span> <a href="./questionnaire.html" class="badge">✎</a></div>
-        ${q.student?`<div class="row"><b>Учебное заведение:</b> <span>${q.student.inst||'-'}</span></div>`:''}
-        ${q.no_status?`<div class="row"><b>Последний въезд:</b> <span>${q.no_status.last_entry||'-'}</span></div>`:''}
+        <div class="row"><b>${t('field.first_name')}:</b> <span>${q.first||'-'}</span></div>
+        <div class="row"><b>${t('field.last_name')}:</b> <span>${q.last||'-'}</span></div>
+        <div class="row"><b>${t('field.citizenship')}:</b> <span>${labelCit(q.citizenship)}</span></div>
+        <div class="row"><b>${t('field.status')}:</b> <span>${labelStatus(q.status)}</span></div>
+        <div class="row"><b>${t('field.voivodeship')}:</b> <span>${q.voivodeship||'-'}</span></div>
+        <div class="row"><b>${t('field.income_level')}:</b> <span>${labelIncome(q.income_level)}</span></div>
+        ${q.student ? `<div class="row"><b>${t('q_student_block')}:</b> <span>${q.student.inst||'-'}, ${q.student.doc||'-'}, ${q.student.start||'-'} — ${q.student.end||'-'}</span></div>` : ''}
+        ${q.no_status ? `<div class="row"><b>${t('q_ns_block')}:</b> <span>${q.no_status.last_entry||'-'}, ${q.no_status.has_offer ? t('opt_yes') : t('opt_no')}</span></div>` : ''}
       </div>
     `;
   }
 
-  document.getElementById('continue').onclick = ()=> location.href='./checklist.html';
+  function initTG(){
+    const tg = window.Telegram && window.Telegram.WebApp;
+    if(!tg) return;
+    tg.expand(); tg.ready();
+  }
+
+  function bindContinue(){
+    $('#continue').onclick = ()=> location.href = './checklist.html';
+  }
+
+  async function boot(){
+    initTG();
+    bindLang();
+    await i18n.load(storage.get('lang','ru'));
+    bindContinue();
+  }
+  document.addEventListener('DOMContentLoaded', boot);
+  window.addEventListener('pageshow', boot);
+})();
 </script>
 </body>
 </html>
