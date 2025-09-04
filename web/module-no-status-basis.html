@@ -1,0 +1,37 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8" />
+  <title>Нет статуса — выбрать основание — eMigrant</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <script src="https://telegram.org/js/telegram-web-app.js"></script>
+  <link rel="stylesheet" href="./styles.css" />
+</head>
+<body>
+<div class="screen">
+  <div class="container">
+    <div class="header">
+      <div class="h1">Если нет статуса: выбираем основание</div>
+      <a href="./checklist.html" class="badge">← к чеклисту</a>
+    </div>
+
+    <div class="card">
+      <p class="p"><b>Важно:</b> только легальные пути. Это не юридическая консультация; ссылки и правила будут уточняться.</p>
+      <div class="h2">Варианты оснований</div>
+      <ul class="p">
+        <li><b>Работа</b>: оффер/умова, сведения о работодателе.</li>
+        <li><b>Учёба</b>: зачисление/справка из вуза, период обучения, адрес.</li>
+        <li><b>Семья</b>: брак/воссоединение, подтверждающие документы.</li>
+      </ul>
+      <div class="h2">Дальше</div>
+      <p class="p">После выбора основания — соберите документы и подавайте на <i>pobyt czasowy</i> по соответствующей ветке.</p>
+    </div>
+  </div>
+</div>
+<script type="module">
+  import { initTelegram } from './auth.js';
+  import { enableBackButton } from './utils.js';
+  initTelegram(); enableBackButton();
+</script>
+</body>
+</html>
