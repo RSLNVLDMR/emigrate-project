@@ -23,7 +23,7 @@
 
     <div class="footer">
       <button id="continue" class="btn full" data-i18n="preview_continue">Продолжить</button>
-      <small class="muted" data-i18n="preview_note">Кнопка «Продолжить» не запускает PDF/AI. Она ведёт на главный экран с чек-листом.</small>
+      <small class="muted" data-i18n="preview_note">Кнопка «Продолжить» не запускает PDF/AI. Она ведёт на главный экран с чеклистом.</small>
     </div>
   </div>
 </div>
@@ -43,54 +43,32 @@
         const res = await fetch(`./i18n/${use}.json`, {cache:'no-store'});
         if(res.ok){ i18n.dict = await res.json(); i18n.lang = use; storage.set('lang',use); }
       }catch(e){}
-      apply();
-      highlightLang();
-      renderSummary();
+      apply(); highlightLang(); renderSummary();
     }
   };
   const t = (k)=> i18n.dict[k] || k;
+  function apply(){ $$('[data-i18n]').forEach(el=>{ const k=el.getAttribute('data-i18n'); if(i18n.dict[k]) el.textContent=i18n.dict[k]; }); document.documentElement.setAttribute('lang', i18n.lang); }
+  function highlightLang(){ $$('.lang button').forEach(b=> b.classList.toggle('active', b.dataset.lang===i18n.lang)); }
+  function bindLang(){ $$('.lang button').forEach(b=> b.onclick = ()=> i18n.load(b.dataset.lang)); }
 
-  function apply(){
-    $$('[data-i18n]').forEach(el=>{
-      const k = el.getAttribute('data-i18n');
-      if(i18n.dict[k]) el.textContent = i18n.dict[k];
-    });
-    document.documentElement.setAttribute('lang', i18n.lang);
-  }
-  function highlightLang(){
-    $$('.lang button').forEach(b=> b.classList.toggle('active', b.dataset.lang===i18n.lang));
-  }
-  function bindLang(){
-    $$('.lang button').forEach(b=> b.onclick = ()=> i18n.load(b.dataset.lang));
-  }
+  function labelCit(v){ return v==='ua'?t('cit.ua'):v==='by'?t('cit.by'):v==='ru'?t('cit.ru'):v; }
+  function labelStatus(v){ if(v==='pesel_ukr')return t('status.pesel_ukr'); if(v==='asylum')return t('status.asylum'); if(v==='karta_czasowa')return t('status.karta'); if(v==='student')return t('status.student'); if(v==='no_status')return t('status.no_status'); return v; }
+  function labelIncome(v){ return v==='lt_4700'?t('income.lt4700'):v==='gt_4700'?t('income.gt4700'):v; }
 
-  function labelCit(v){
-    if(v==='ua') return t('cit.ua');
-    if(v==='by') return t('cit.by');
-    if(v==='ru') return t('cit.ru');
-    return v;
-  }
-  function labelStatus(v){
-    if(v==='pesel_ukr') return t('status.pesel_ukr');
-    if(v==='asylum') return t('status.asylum');
-    if(v==='karta_czasowa') return t('status.karta');
-    if(v==='student') return t('status.student');
-    if(v==='no_status') return t('status.no_status');
-    return v;
-  }
-  function labelIncome(v){
-    if(v==='lt_4700') return t('income.lt4700');
-    if(v==='gt_4700') return t('income.gt4700');
-    return v;
+  // 💡 Алгоритм выбора пути (должен совпадать с checklist.html)
+  function decidePath(q){
+    if(q?.status==='student') return 'pobyt_study';
+    if(q?.status==='no_status') return 'regularize';
+    if(q?.status==='pesel_ukr') return 'pesel_support';
+    if(q?.status==='asylum') return 'asylum_support';
+    if(q?.status==='karta_czasowa') return 'pobyt_support';
+    return 'regularize';
   }
 
   function renderSummary(){
     const q = storage.get('questionnaire', null);
     const s = $('#summary');
-    if(!q){
-      s.innerHTML = `<p class="p">—</p>`;
-      return;
-    }
+    if(!q){ s.innerHTML = `<p class="p">—</p>`; return; }
     s.innerHTML = `
       <div class="col">
         <div class="row"><b>${t('field.first_name')}:</b> <span>${q.first||'-'}</span></div>
@@ -105,14 +83,19 @@
     `;
   }
 
-  function initTG(){
-    const tg = window.Telegram && window.Telegram.WebApp;
-    if(!tg) return;
-    tg.expand(); tg.ready();
-  }
+  function initTG(){ const tg=window.Telegram&&window.Telegram.WebApp; if(!tg) return; tg.expand(); tg.ready(); }
 
   function bindContinue(){
-    $('#continue').onclick = ()=> location.href = './checklist.html';
+    $('#continue').onclick = ()=>{
+      const q = storage.get('questionnaire', null);
+      // помечаем онбординг завершённым и сохраняем выбранный путь
+      const pathId = decidePath(q||{});
+      storage.set('last_path', pathId);
+      storage.set('onboarding_done', true);
+      storage.set('onboarding_ts', Date.now());
+      // переход к чеклисту
+      location.href = './checklist.html';
+    };
   }
 
   async function boot(){
