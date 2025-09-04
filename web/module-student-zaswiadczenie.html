@@ -1,0 +1,52 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8" />
+  <title>Zaświadczenie z uczelni — eMigrant</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <script src="https://telegram.org/js/telegram-web-app.js"></script>
+  <link rel="stylesheet" href="./styles.css" />
+</head>
+<body>
+<div class="screen">
+  <div class="container">
+    <div class="header">
+      <div class="h1">Zaświadczenie z uczelni</div>
+      <a href="./checklist.html" class="badge">← к чеклисту</a>
+    </div>
+
+    <div class="card">
+      <div class="h2">Что это</div>
+      <p class="p">Справка из вуза о поступлении (o przyjęciu) или обучении (o studiowaniu) с вашими данными, датами и подписью/штампом.</p>
+      <div class="h2">Как получить</div>
+      <ol class="p">
+        <li>Уточните в деканате/USOS, как оформить справку (электронная/бумажная).</li>
+        <li>Проверьте совпадение ФИО (латиницей) и дат.</li>
+        <li>Попросите указать форму обучения и период.</li>
+      </ol>
+      <div class="h2">Частые ошибки</div>
+      <ul class="p">
+        <li>ФИО не совпадает с загранпаспортом (латиница).</li>
+        <li>Нет дат или подписи/штампа.</li>
+        <li>Нечитаемое качество скана.</li>
+      </ul>
+    </div>
+
+    <div class="card" style="margin-top:12px">
+      <div class="h2">Проверка документа (AI)</div>
+      <input id="file" type="file" accept=".pdf,.jpg,.jpeg,.png" class="input" />
+      <small class="muted">До 10 МБ. Перед отправкой мы анонимизируем личные данные.</small>
+      <div class="row" style="margin-top:10px">
+        <button class="btn secondary" onclick="alert('M1: бесплатная очередь поставлена (демо)')">Отправить бесплатно (до 24 ч)</button>
+        <button class="btn" onclick="alert('M1: оплата/ускорение будет в M2')">Оплатить ускорение (~1 мин)</button>
+      </div>
+    </div>
+  </div>
+</div>
+<script type="module">
+  import { initTelegram } from './auth.js';
+  import { enableBackButton } from './utils.js';
+  initTelegram(); enableBackButton();
+</script>
+</body>
+</html>
