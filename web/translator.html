@@ -1,0 +1,61 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8" />
+  <title>Переводчик — eMigrant</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <script src="https://telegram.org/js/telegram-web-app.js"></script>
+  <link rel="stylesheet" href="./styles.css" />
+</head>
+<body>
+<div class="screen">
+  <div class="container">
+    <div class="header">
+      <div class="h1" data-i18n="translator_title">AI переводчик</div>
+      <div class="lang">
+        <button data-lang="ru" class="active">RU</button><button data-lang="ua">UA</button><button data-lang="by">BY</button>
+      </div>
+    </div>
+    <div class="row" style="gap:8px">
+      <label class="col" style="flex:1"><span data-i18n="translator_from">С языка</span>
+        <select id="from" class="input">
+          <option value="ru">RU</option><option value="pl">PL</option><option value="ua">UA</option><option value="en">EN</option>
+        </select>
+      </label>
+      <label class="col" style="flex:1"><span data-i18n="translator_to">На язык</span>
+        <select id="to" class="input">
+          <option value="pl">PL</option><option value="ru">RU</option><option value="ua">UA</option><option value="en">EN</option>
+        </select>
+      </label>
+    </div>
+    <textarea id="src" class="input" data-i18n="translator_placeholder" placeholder="Вставьте текст для перевода…"></textarea>
+    <div class="footer">
+      <button id="go" class="btn full" data-i18n="translator_do">Перевести</button>
+      <div id="out" class="card" style="margin-top:12px;white-space:pre-wrap"></div>
+    </div>
+  </div>
+
+  <div class="tabs">
+    <a class="tab" href="./translator.html" data-i18n="nav_translator">Переводчик</a>
+    <a class="tab" href="./checklist.html" data-i18n="nav_checklist">Чеклист</a>
+    <a class="tab" href="./consultant.html" data-i18n="nav_consultant">Консультант</a>
+  </div>
+</div>
+<script type="module">
+  import { i18n, initLangSwitcher, $ } from './utils.js';
+  import { initTelegram } from './auth.js';
+  import { translateText } from './api.js';
+
+  initTelegram();
+  await i18n.load(localStorage.getItem('lang')||'ru');
+  initLangSwitcher();
+
+  $('#go').onclick = async ()=>{
+    const text = $('#src').value.trim();
+    if(!text){ alert('Введите текст'); return; }
+    const out = await translateText({text, from:$('#from').value, to:$('#to').value});
+    $('#out').textContent = out;
+  };
+</script>
+</body>
+</html>
