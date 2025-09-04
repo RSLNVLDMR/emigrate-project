@@ -7,7 +7,6 @@
   <script src="https://telegram.org/js/telegram-web-app.js"></script>
   <link rel="stylesheet" href="./styles.css" />
   <style>
-    /* Защита от перекрытия кликов */
     .lang button, .header { pointer-events:auto; }
   </style>
 </head>
@@ -17,7 +16,6 @@
     <div class="header">
       <div class="col">
         <div class="h1" data-i18n="app_title">eMigrant — помощь с легализацией в Польше</div>
-        <!-- Полный текст по умолчанию, без «…». i18n заменит при загрузке -->
         <small class="muted" data-i18n="disclaimer">
           Не является юридической консультацией. Правила и сроки меняются — мы укажем даты последней проверки.
         </small>
@@ -46,7 +44,17 @@
   const $$ = (s, r=document)=>Array.from(r.querySelectorAll(s));
   const storage = { get(k,d=null){try{return JSON.parse(localStorage.getItem(k))??d}catch{return d}}, set(k,v){localStorage.setItem(k,JSON.stringify(v))} };
 
-  // Мини-i18n без внешних импортов
+  // 🔁 Автологин в чеклист для завершивших анкету
+  (function earlyRedirect(){
+    const done = storage.get('onboarding_done', false);
+    const hasQ = !!storage.get('questionnaire', null);
+    if (done && hasQ) {
+      // чтобы не было «мигания» стартового экрана
+      location.replace('./checklist.html');
+    }
+  })();
+
+  // Мини-i18n
   const i18n = {
     lang: storage.get('lang','ru'),
     dict:{},
@@ -56,8 +64,7 @@
         const res = await fetch(`./i18n/${use}.json`, {cache:'no-store'});
         if(res.ok){ i18n.dict = await res.json(); i18n.lang = use; storage.set('lang',use); }
       }catch(e){}
-      apply();
-      highlightLang();
+      apply(); highlightLang();
     }
   };
   function apply(){
@@ -80,8 +87,6 @@
     const tg = window.Telegram && window.Telegram.WebApp;
     if(!tg) return;
     tg.expand(); tg.ready();
-    // Иногда WebView возвращает страницу из bfcache без событий — страховка:
-    tg.onEvent && tg.onEvent('themeChanged', ()=>{ /* цвета в CSS */ });
   }
 
   async function boot(){
