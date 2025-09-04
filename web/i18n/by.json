@@ -1,26 +1,68 @@
 {
   "app_title": "eMigrant — дапамога з легалізацыяй у Польшчы",
   "start_title": "Пачнём з кароткай анкеты",
-  "start_p": "Адказы дапамогуць падабраць шлях легалізацыі і сабраць персанальны чек-ліст дакументаў.",
+  "start_p": "Адказы дапамогуць падабраць шлях легалізацыі і сабраць персанальны чэк-ліст дакументаў.",
   "start_cta": "Пачаць анкету",
   "disclaimer": "Не з'яўляецца юрыдычнай кансультацыяй. Правілы і тэрміны змяняюцца — мы пазначым даты апошняй праверкі.",
+
   "q_title": "Анкета",
-  "q_name": "Імя (лацінкай як у замежпашпарце)",
+  "q_name": "Імя (лацінкай)",
   "q_surname": "Прозвішча (лацінкай)",
-  "q_birth": "Дата нараджэння (ДД.ММ.ГГГГ)",
   "q_citizenship": "Грамадзянства",
   "q_status": "Бягучы статус",
-  "q_next": "Далей",
-  "q_prev": "Назад",
+  "q_voivodeship": "Ваеводства",
+  "q_income": "Узровень заробку",
   "q_preview": "Прагледзець адказы",
+
+  "q_student_block": "Даныя для студэнта",
+  "q_student_inst": "ВНУ / навучальная ўстанова",
+  "q_student_doc": "Дакумент",
+  "q_student_doc_adm": "Zaświadczenie o przyjęciu",
+  "q_student_doc_study": "Zaświadczenie o studiowaniu",
+  "q_student_start": "Пачатак (ДД.ММ.ГГГГ)",
+  "q_student_end": "Завяршэнне (ДД.ММ.ГГГГ)",
+
+  "q_ns_block": "Калі няма статусу",
+  "q_ns_entry": "Дата апошняга ўезду (ДД.ММ.ГГГГ)",
+  "q_ns_offer": "Ёсць оффер на працу?",
+
+  "opt_yes": "Так",
+  "opt_no": "Не",
+
+  "cit.ua": "Украіна",
+  "cit.by": "Беларусь",
+  "cit.ru": "Расія",
+
+  "status.pesel_ukr": "PESEL-UKR",
+  "status.asylum": "Бежанства / міжнародная абарона",
+  "status.karta": "Karta pobytu czasowego (дзейнічае)",
+  "status.student": "Студэнт",
+  "status.no_status": "Няма статусу",
+
+  "income.lt4700": "менш за 4700 zł",
+  "income.gt4700": "больш за 4700 zł",
+
+  "err_name_latin": "Імя/прозвішча: толькі лацінка, мінімум 2 сімвалы",
+  "err_date_format": "Дата павінна быць у фармаце ДД.ММ.ГГГГ",
+
   "preview_title": "Праверце адказы",
-  "preview_edit": "✎ Змяніць",
   "preview_continue": "Працягнуць",
-  "cl_title": "Ваш чек-ліст",
+  "preview_note": "Кнопка «Працягнуць» не запускае PDF/AI. Яна вядзе на галоўны экран з чэк-лістам.",
+
+  "field.first_name": "Імя",
+  "field.last_name": "Прозвішча",
+  "field.citizenship": "Грамадзянства",
+  "field.status": "Статус",
+  "field.voivodeship": "Ваеводства",
+  "field.income_level": "Узровень заробку",
+
+  "cl_title": "Ваш чэк-ліст",
   "cl_progress": "Прагрэс",
+
   "nav_translator": "Перакладчык",
   "nav_checklist": "Чэк-ліст",
   "nav_consultant": "Кансультант",
+
   "translator_title": "AI перакладчык",
   "translator_from": "З мовы",
   "translator_to": "На мову",
@@ -30,5 +72,25 @@
   "consult_topic": "Каротка апішыце запыт",
   "consult_msg": "Паведамленне/дэталі",
   "consult_open_chat": "Адкрыць чат у Telegram",
-  "legal_title": "Палітыка канфідэнцыйнасці і ўмовы"
+  "legal_title": "Палітыка канфідэнцыйнасці і ўмовы",
+
+  "path.pobyt_study": "Pobyt czasowy — навучанне",
+  "path.regularize": "Легалізацыя (вызначыць падставу)",
+  "path.pesel_support": "Падтрымка PESEL-UKR",
+  "path.asylum_support": "Бежанства — суправаджэнне",
+  "path.pobyt_support": "Дзейная karta pobytu — суправаджэнне",
+
+  "item.student_zaswiadczenie": "Zaświadczenie z uczelni",
+  "item.photo_fee_wniosek": "Фота, аплата, wniosek",
+  "item.visit_biometrics": "Візіт і біаметрыя",
+  "item.choose_basis": "Вызначыць падставу (праца/вучоба/сям'я)",
+  "item.collect_docs": "Збор дакументаў па падставе",
+  "item.submit_pobyt": "Падача на pobyt czasowy",
+  "item.pesel_rights": "Правы і пацвярджэнні па PESEL-UKR",
+  "item.work_insurance": "Праца і страхоўка",
+  "item.address": "Адрас/мельдунек",
+  "item.asylum_brief": "Ход працэдуры і правы",
+  "item.parallel_options": "Паралельныя опцыі (вучоба/праца)",
+  "item.obligations": "Абавязкі і падаўжэнне",
+  "item.employer_change": "Змена працадаўцы (калі трэба)"
 }
