@@ -1,0 +1,56 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8" />
+  <title>Превью анкеты — eMigrant</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <script src="https://telegram.org/js/telegram-web-app.js"></script>
+  <link rel="stylesheet" href="./styles.css" />
+</head>
+<body>
+<div class="screen">
+  <div class="container">
+    <div class="header">
+      <div class="h1" data-i18n="preview_title">Проверьте ответы</div>
+      <div class="badge">✎ inline edit позже (M2)</div>
+    </div>
+
+    <div id="summary" class="card"></div>
+
+    <div class="footer">
+      <button id="continue" class="btn full" data-i18n="preview_continue">Продолжить</button>
+      <small class="muted">Кнопка «Продолжить» <b>не</b> запускает PDF/AI. Она ведёт на главный экран с чеклистом.</small>
+    </div>
+  </div>
+</div>
+
+<script type="module">
+  import { i18n, $, initLangSwitcher } from './utils.js';
+  import { getQuestionnaire } from './api.js';
+  import { initTelegram, CFG } from './auth.js';
+
+  initTelegram();
+  await i18n.load(localStorage.getItem('lang')||'ru');
+  initLangSwitcher?.();
+
+  const q = getQuestionnaire();
+  const s = $('#summary');
+  if(!q || !q.first){ s.innerHTML = '<p class="p">Анкета пустая. Вернитесь и заполните.</p>'; }
+  else {
+    s.innerHTML = `
+      <div class="col">
+        <div class="row"><b>Имя:</b> <span>${q.first}</span> <a href="./questionnaire.html" class="badge">✎</a></div>
+        <div class="row"><b>Фамилия:</b> <span>${q.last}</span> <a href="./questionnaire.html" class="badge">✎</a></div>
+        <div class="row"><b>Дата рождения:</b> <span>${q.birth}</span> <a href="./questionnaire.html" class="badge">✎</a></div>
+        <div class="row"><b>Гражданство:</b> <span>${q.citizenship}</span> <a href="./questionnaire.html" class="badge">✎</a></div>
+        <div class="row"><b>Статус:</b> <span>${q.status}</span> <a href="./questionnaire.html" class="badge">✎</a></div>
+        ${q.student?`<div class="row"><b>Учебное заведение:</b> <span>${q.student.inst||'-'}</span></div>`:''}
+        ${q.no_status?`<div class="row"><b>Последний въезд:</b> <span>${q.no_status.last_entry||'-'}</span></div>`:''}
+      </div>
+    `;
+  }
+
+  document.getElementById('continue').onclick = ()=> location.href='./checklist.html';
+</script>
+</body>
+</html>
