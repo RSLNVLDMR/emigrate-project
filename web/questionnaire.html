@@ -1,0 +1,141 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8" />
+  <title>Анкета — eMigrant</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <script src="https://telegram.org/js/telegram-web-app.js"></script>
+  <link rel="stylesheet" href="./styles.css" />
+</head>
+<body>
+<div class="screen">
+  <div class="container">
+    <div class="header">
+      <div class="h1" data-i18n="q_title">Анкета</div>
+      <div class="lang">
+        <button data-lang="ru" class="active">RU</button><button data-lang="ua">UA</button><button data-lang="by">BY</button>
+      </div>
+    </div>
+
+    <div class="col">
+      <label class="col">
+        <span data-i18n="q_name">Имя (латиницей как в загранпаспорте)</span>
+        <input id="first_name" class="input" placeholder="Ivan" />
+      </label>
+      <label class="col">
+        <span data-i18n="q_surname">Фамилия (латиницей)</span>
+        <input id="last_name" class="input" placeholder="Ivanov" />
+      </label>
+      <label class="col">
+        <span data-i18n="q_birth">Дата рождения (ДД.ММ.ГГГГ)</span>
+        <input id="birth" class="input" placeholder="31.12.1999" />
+      </label>
+
+      <label class="col">
+        <span data-i18n="q_citizenship">Гражданство</span>
+        <select id="citizenship" class="input">
+          <option value="ua">Украина</option>
+          <option value="by">Беларусь</option>
+          <option value="ru">Россия</option>
+        </select>
+      </label>
+
+      <label class="col">
+        <span data-i18n="q_status">Текущий статус</span>
+        <select id="status" class="input">
+          <option value="pesel_ukr">PESEL-UKR</option>
+          <option value="asylum">Беженство / международная защита</option>
+          <option value="karta_czasowa">Karta pobytu czasowego (действующая)</option>
+          <option value="student">Учащийся</option>
+          <option value="no_status">Нет статуса</option>
+        </select>
+      </label>
+
+      <div id="student_extra" class="card hidden">
+        <div class="h2">Данные для учащегося</div>
+        <label class="col"><span>Учебное заведение</span><input id="stud_inst" class="input" placeholder="UW / PW / ..."/></label>
+        <label class="col"><span>Документ</span>
+          <select id="stud_doc" class="input">
+            <option value="o_przyjeciu">Zaświadczenie o przyjęciu</option>
+            <option value="o_studiowaniu">Zaświadczenie o studiowaniu</option>
+          </select>
+        </label>
+        <div class="row">
+          <label class="col" style="flex:1"><span>Начало (ДД.ММ.ГГГГ)</span><input id="stud_start" class="input" placeholder="01.10.2025"/></label>
+          <label class="col" style="flex:1"><span>Окончание (ДД.ММ.ГГГГ)</span><input id="stud_end" class="input" placeholder="30.06.2026"/></label>
+        </div>
+      </div>
+
+      <div id="nostatus_extra" class="card hidden">
+        <div class="h2">Если нет статуса</div>
+        <label class="col"><span>Дата последнего въезда (ДД.ММ.ГГГГ)</span><input id="ns_entry" class="input" placeholder="15.08.2025"/></label>
+        <label class="col"><span>Есть оффер на работу?</span>
+          <select id="ns_offer" class="input">
+            <option value="no">Нет</option><option value="yes">Да</option>
+          </select>
+        </label>
+      </div>
+    </div>
+
+    <div class="footer">
+      <div class="row">
+        <button id="prev" class="btn secondary" data-i18n="q_prev">Назад</button>
+        <button id="next" class="btn full" data-i18n="q_preview">Просмотреть ответы</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script type="module">
+  import { i18n, initLangSwitcher, isLatinName, isDDMMYYYY, $ } from './utils.js';
+  import { initTelegram } from './auth.js';
+  import { saveQuestionnaire } from './api.js';
+
+  initTelegram();
+  await i18n.load(localStorage.getItem('lang')||'ru');
+  initLangSwitcher();
+
+  const statusEl = $('#status');
+  const studBox = $('#student_extra');
+  const nsBox = $('#nostatus_extra');
+
+  const toggleExtras = ()=>{
+    studBox.classList.toggle('hidden', statusEl.value!=='student');
+    nsBox.classList.toggle('hidden', statusEl.value!=='no_status');
+  };
+  statusEl.addEventListener('change', toggleExtras);
+  toggleExtras();
+
+  $('#prev').onclick = ()=> history.back();
+
+  $('#next').onclick = ()=>{
+    const first = $('#first_name').value.trim();
+    const last = $('#last_name').value.trim();
+    const birth = $('#birth').value.trim();
+    if(!isLatinName(first) || !isLatinName(last)){ alert('Имя/фамилия: только латиница, минимум 2 символа'); return; }
+    if(!isDDMMYYYY(birth)){ alert('Дата рождения в формате ДД.ММ.ГГГГ'); return; }
+    const q = {
+      first, last, birth,
+      citizenship: $('#citizenship').value,
+      status: statusEl.value
+    };
+    if(statusEl.value==='student'){
+      q.student = {
+        inst: $('#stud_inst').value.trim(),
+        doc: $('#stud_doc').value,
+        start: $('#stud_start').value.trim(),
+        end: $('#stud_end').value.trim()
+      };
+    }
+    if(statusEl.value==='no_status'){
+      q.no_status = {
+        last_entry: $('#ns_entry').value.trim(),
+        has_offer: $('#ns_offer').value==='yes'
+      };
+    }
+    saveQuestionnaire(q);
+    location.href = './questionnaire-preview.html';
+  };
+</script>
+</body>
+</html>
