@@ -7,13 +7,10 @@
   <script src="https://telegram.org/js/telegram-web-app.js"></script>
   <link rel="stylesheet" href="./styles.css" />
   <style>
-    /* Делает элементы гарантированно кликабельными в WebView */
-    .screen{position:relative}
-    .container{position:relative; z-index:1; pointer-events:auto}
-    .footer{position:sticky; bottom:0; z-index:3; pointer-events:auto}
-    .lang{position:relative; z-index:4}
-    .lang button{position:relative; z-index:5}
-    button, .btn, select, .input { pointer-events:auto; touch-action:manipulation; -webkit-tap-highlight-color:transparent }
+    /* Страховка от «не кликается» в WebView */
+    .screen,.container,.footer,.lang,button,.btn,select,input,textarea { pointer-events:auto; }
+    .lang{position:relative; z-index:5}
+    .footer{position:sticky; bottom:0; z-index:4}
   </style>
 </head>
 <body>
@@ -83,7 +80,8 @@
       <label class="col">
         <span>Уровень заработка</span>
         <select id="income_level" class="input">
-          <!-- опции подставятся при загрузке -->
+          <option value="lt_4700">меньше 4700 zł</option>
+          <option value="gt_4700">больше 4700 zł</option>
         </select>
       </label>
 
@@ -122,30 +120,62 @@
   </div>
 </div>
 
-<script type="module">
-  import { i18n, initLangSwitcher, isLatinName, $, isDDMMYYYY } from './utils.js';
-  import { initTelegram } from './auth.js';
-  import { saveQuestionnaire } from './api.js';
+<script>
+(function(){
+  // --- helpers (встроенные, без импортов) ---
+  const $ = (sel, root=document)=> root.querySelector(sel);
+  const $$ = (sel, root=document)=> Array.from(root.querySelectorAll(sel));
+  const storage = {
+    get(k, d=null){ try{return JSON.parse(localStorage.getItem(k)) ?? d}catch{ return d } },
+    set(k, v){ localStorage.setItem(k, JSON.stringify(v)) }
+  };
+  const isLatinName = s => /^[A-Za-z\s\-']{2,}$/.test(String(s||'').trim());
+  const isDDMMYYYY = s => /^([0-2]\d|3[01])\.(0\d|1[0-2])\.(19|20)\d{2}$/.test(String(s||'').trim());
 
-  function setIncomeOptions(){
-    const level = document.getElementById('income_level');
-    level.innerHTML = `
-      <option value="lt_4700">меньше 4700 zł</option>
-      <option value="gt_4700">больше 4700 zł</option>
-    `;
+  // --- i18n минималка ---
+  const i18n = {
+    lang: storage.get('lang','ru'),
+    dict: {},
+    async load(lang){
+      try{
+        const res = await fetch(`./i18n/${lang}.json`, {cache:'no-store'});
+        if(res.ok){ i18n.dict = await res.json(); i18n.lang = lang; storage.set('lang', lang); }
+      }catch(e){ /* fallback: RU по умолчанию */ }
+      apply();
+    }
+  };
+  function apply(){
+    $$('[data-i18n]').forEach(el=>{
+      const key = el.getAttribute('data-i18n');
+      if(i18n.dict[key]) el.textContent = i18n.dict[key];
+    });
+    // подсветка активной кнопки языка
+    $$('.lang button').forEach(b=> b.classList.toggle('active', b.dataset.lang === i18n.lang));
+    document.documentElement.setAttribute('lang', i18n.lang);
+  }
+  function bindLang(){
+    $$('.lang button').forEach(b=>{
+      b.onclick = async ()=> { await i18n.load(b.dataset.lang); };
+    });
   }
 
-  function bindDynamic(){
-    const statusEl = $('#status');
-    const studBox = $('#student_extra');
-    const nsBox = $('#nostatus_extra');
+  // --- Telegram WebApp init (минимально) ---
+  (function initTelegram(){
+    const tg = window.Telegram && window.Telegram.WebApp;
+    if(!tg) return;
+    tg.expand(); tg.ready();
+    tg.onEvent && tg.onEvent('themeChanged', ()=>{/* темы handled CSS */});
+  })();
 
-    const toggleExtras = ()=>{
-      studBox.classList.toggle('hidden', statusEl.value!=='student');
-      nsBox.classList.toggle('hidden', statusEl.value!=='no_status');
-    };
-    statusEl.removeEventListener?.('change', toggleExtras);
-    statusEl.addEventListener('change', toggleExtras);
+  // --- логика анкеты ---
+  function toggleExtras(){
+    const st = $('#status').value;
+    $('#student_extra').classList.toggle('hidden', st!=='student');
+    $('#nostatus_extra').classList.toggle('hidden', st!=='no_status');
+  }
+
+  function bindControls(){
+    $('#status').addEventListener('change', toggleExtras);
     toggleExtras();
 
     // кнопки
@@ -153,10 +183,9 @@
     $('#next').onclick = ()=>{
       const first = $('#first_name').value.trim();
       const last  = $('#last_name').value.trim();
-
       if(!isLatinName(first) || !isLatinName(last)){
         alert('Имя/фамилия: только латиница, минимум 2 символа'); return;
-      }
+        }
 
       const q = {
         first, last,
@@ -184,34 +213,23 @@
         if(q.no_status.last_entry && !isDDMMYYYY(q.no_status.last_entry)){ alert('Дата последнего въезда: формат ДД.ММ.ГГГГ'); return; }
       }
 
-      saveQuestionnaire(q);
+      storage.set('questionnaire', q);
       location.href = './questionnaire-preview.html';
     };
   }
 
+  // --- загрузка страницы/языка и бинды ---
   async function boot(){
-    initTelegram();
-    // применяем язык, выбранный на первом экране
-    await i18n.load(localStorage.getItem('lang')||'ru');
-    initLangSwitcher();
-    document.documentElement.setAttribute('lang', i18n.lang);
-
-    // заполняем уровни дохода (сейчас: 2 опции)
-    setIncomeOptions();
-
-    // биндим всё кликабельное
-    bindDynamic();
+    await i18n.load(storage.get('lang','ru'));
+    bindLang();
+    bindControls();
   }
 
-  await boot();
-
-  // Повторная инициализация после возврата из истории (bfcache)
-  window.addEventListener('pageshow', async ()=>{
-    await i18n.load(localStorage.getItem('lang')||'ru');
-    initLangSwitcher();
-    setIncomeOptions();
-    bindDynamic();
-  });
+  // при обычной загрузке
+  document.addEventListener('DOMContentLoaded', boot);
+  // при возврате из истории (bfcache)
+  window.addEventListener('pageshow', boot);
+})();
 </script>
 </body>
 </html>
