@@ -36,10 +36,22 @@
 <script type="module">
   import { i18n, initLangSwitcher } from './utils.js';
   import { initTelegram } from './auth.js';
-  window.BOT_USERNAME = 'testmigratebot'; /* set real bot username */
+
+  // Укажите имя вашего бота:
+  window.BOT_USERNAME = 'your_bot_username_here';
+
+  // Первая инициализация
   initTelegram();
-  await i18n.load(localStorage.getItem('lang')||'ru');
+  await i18n.load(localStorage.getItem('lang') || 'ru');
   initLangSwitcher();
+
+  // 🔧 ФИКС: при возврате «назад» страница может восстановиться из bfcache,
+  // и обработчики кликов у некоторых клиентов пропадают.
+  // Повторно переинициализируем переключатель языков и словарь.
+  window.addEventListener('pageshow', async () => {
+    await i18n.load(localStorage.getItem('lang') || 'ru');
+    initLangSwitcher();
+  });
 </script>
 </body>
 </html>
