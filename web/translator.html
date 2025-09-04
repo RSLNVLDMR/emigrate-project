@@ -6,6 +6,11 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <script src="https://telegram.org/js/telegram-web-app.js"></script>
   <link rel="stylesheet" href="./styles.css" />
+  <style>
+    .lang{position:relative;z-index:5}
+    .footer{position:sticky;bottom:0;z-index:4}
+    button,.btn,select,input,textarea{pointer-events:auto;touch-action:manipulation;-webkit-tap-highlight-color:transparent}
+  </style>
 </head>
 <body>
 <div class="screen">
@@ -13,22 +18,37 @@
     <div class="header">
       <div class="h1" data-i18n="translator_title">AI переводчик</div>
       <div class="lang">
-        <button data-lang="ru" class="active">RU</button><button data-lang="ua">UA</button><button data-lang="by">BY</button>
+        <button data-lang="ru" class="active">RU</button>
+        <button data-lang="ua">UA</button>
+        <button data-lang="by">BY</button>
       </div>
     </div>
+
     <div class="row" style="gap:8px">
-      <label class="col" style="flex:1"><span data-i18n="translator_from">С языка</span>
+      <label class="col" style="flex:1">
+        <span data-i18n="translator_from">С языка</span>
         <select id="from" class="input">
-          <option value="ru">RU</option><option value="pl">PL</option><option value="ua">UA</option><option value="en">EN</option>
+          <option value="ru">RU</option>
+          <option value="pl">PL</option>
+          <option value="ua">UA</option>
+          <option value="by">BY</option>
+          <option value="en">EN</option>
         </select>
       </label>
-      <label class="col" style="flex:1"><span data-i18n="translator_to">На язык</span>
+      <label class="col" style="flex:1">
+        <span data-i18n="translator_to">На язык</span>
         <select id="to" class="input">
-          <option value="pl">PL</option><option value="ru">RU</option><option value="ua">UA</option><option value="en">EN</option>
+          <option value="pl">PL</option>
+          <option value="ru">RU</option>
+          <option value="ua">UA</option>
+          <option value="by">BY</option>
+          <option value="en">EN</option>
         </select>
       </label>
     </div>
+
     <textarea id="src" class="input" data-i18n="translator_placeholder" placeholder="Вставьте текст для перевода…"></textarea>
+
     <div class="footer">
       <button id="go" class="btn full" data-i18n="translator_do">Перевести</button>
       <div id="out" class="card" style="margin-top:12px;white-space:pre-wrap"></div>
@@ -41,21 +61,64 @@
     <a class="tab" href="./consultant.html" data-i18n="nav_consultant">Консультант</a>
   </div>
 </div>
-<script type="module">
-  import { i18n, initLangSwitcher, $ } from './utils.js';
-  import { initTelegram } from './auth.js';
-  import { translateText } from './api.js';
 
-  initTelegram();
-  await i18n.load(localStorage.getItem('lang')||'ru');
-  initLangSwitcher();
+<script>
+(function(){
+  const $ = (s,r=document)=>r.querySelector(s);
+  const $$ = (s,r=document)=>Array.from(r.querySelectorAll(s));
+  const storage = { get(k,d=null){try{return JSON.parse(localStorage.getItem(k))??d}catch{return d}}, set(k,v){localStorage.setItem(k,JSON.stringify(v))} };
 
-  $('#go').onclick = async ()=>{
-    const text = $('#src').value.trim();
-    if(!text){ alert('Введите текст'); return; }
-    const out = await translateText({text, from:$('#from').value, to:$('#to').value});
-    $('#out').textContent = out;
+  // i18n
+  const i18n = {
+    lang: storage.get('lang','ru'),
+    dict:{},
+    async load(lang){
+      const use = lang || i18n.lang;
+      try{
+        const res = await fetch(`./i18n/${use}.json`, {cache:'no-store'});
+        if(res.ok){ i18n.dict = await res.json(); i18n.lang = use; storage.set('lang',use); }
+      }catch(e){}
+      apply(); highlightLang();
+    }
   };
+  const t = (k)=> i18n.dict[k] || k;
+  function apply(){
+    $$('[data-i18n]').forEach(el=>{
+      const k = el.getAttribute('data-i18n');
+      if(i18n.dict[k]) el.textContent = i18n.dict[k];
+      // плейсхолдеры
+      if(el.tagName==='TEXTAREA' && i18n.dict[k]) el.setAttribute('placeholder', i18n.dict[k]);
+    });
+    document.documentElement.setAttribute('lang', i18n.lang);
+  }
+  function highlightLang(){ $$('.lang button').forEach(b=> b.classList.toggle('active', b.dataset.lang===i18n.lang)); }
+  function bindLang(){ $$('.lang button').forEach(b=> b.onclick = ()=> i18n.load(b.dataset.lang)); }
+
+  // Telegram
+  (function(){ const tg=window.Telegram&&window.Telegram.WebApp; if(!tg) return; tg.expand(); tg.ready(); })();
+
+  // translate (M1 demo)
+  async function translateText({text, from, to}){
+    return `DEMO (${from}→${to}): ${text}`;
+  }
+
+  function bindActions(){
+    $('#go').onclick = async ()=>{
+      const text = $('#src').value.trim();
+      if(!text){ alert(t('translator_err_empty')); return; }
+      const out = await translateText({text, from:$('#from').value, to:$('#to').value});
+      $('#out').textContent = out;
+    };
+  }
+
+  async function boot(){
+    bindLang();
+    await i18n.load(storage.get('lang','ru'));
+    bindActions();
+  }
+  document.addEventListener('DOMContentLoaded', boot);
+  window.addEventListener('pageshow', boot);
+})();
 </script>
 </body>
 </html>
