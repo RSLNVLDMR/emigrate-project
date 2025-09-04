@@ -6,6 +6,10 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <script src="https://telegram.org/js/telegram-web-app.js"></script>
   <link rel="stylesheet" href="./styles.css" />
+  <style>
+    /* подстраховка на случай наложений — делаем кнопки языка кликабельными наверняка */
+    .lang button{position:relative;z-index:2}
+  </style>
 </head>
 <body>
 <div class="screen">
@@ -13,22 +17,20 @@
     <div class="header">
       <div class="h1" data-i18n="q_title">Анкета</div>
       <div class="lang">
-        <button data-lang="ru" class="active">RU</button><button data-lang="ua">UA</button><button data-lang="by">BY</button>
+        <button data-lang="ru" class="active">RU</button>
+        <button data-lang="ua">UA</button>
+        <button data-lang="by">BY</button>
       </div>
     </div>
 
     <div class="col">
       <label class="col">
-        <span data-i18n="q_name">Имя (латиницей как в загранпаспорте)</span>
+        <span>Имя (латиницей)</span>
         <input id="first_name" class="input" placeholder="Ivan" />
       </label>
       <label class="col">
-        <span data-i18n="q_surname">Фамилия (латиницей)</span>
+        <span>Фамилия (латиницей)</span>
         <input id="last_name" class="input" placeholder="Ivanov" />
-      </label>
-      <label class="col">
-        <span data-i18n="q_birth">Дата рождения (ДД.ММ.ГГГГ)</span>
-        <input id="birth" class="input" placeholder="31.12.1999" />
       </label>
 
       <label class="col">
@@ -49,6 +51,39 @@
           <option value="student">Учащийся</option>
           <option value="no_status">Нет статуса</option>
         </select>
+      </label>
+
+      <label class="col">
+        <span>Воеводство</span>
+        <select id="voivodeship" class="input">
+          <option value="dolnoslaskie">Dolnośląskie</option>
+          <option value="kujawsko_pomorskie">Kujawsko-Pomorskie</option>
+          <option value="lubelskie">Lubelskie</option>
+          <option value="lubuskie">Lubuskie</option>
+          <option value="lodzkie">Łódzkie</option>
+          <option value="malopolskie">Małopolskie</option>
+          <option value="mazowieckie">Mazowieckie</option>
+          <option value="opolskie">Opolskie</option>
+          <option value="podkarpackie">Podkarpackie</option>
+          <option value="podlaskie">Podlaskie</option>
+          <option value="pomorskie">Pomorskie</option>
+          <option value="slaskie">Śląskie</option>
+          <option value="swietokrzyskie">Świętokrzyskie</option>
+          <option value="warminsko_mazurskie">Warmińsko-Mazurskie</option>
+          <option value="wielkopolskie">Wielkopolskie</option>
+          <option value="zachodniopomorskie">Zachodniopomorskie</option>
+        </select>
+      </label>
+
+      <label class="col">
+        <span>Уровень заработка</span>
+        <select id="income_level" class="input">
+          <!-- опции подставляются динамически от воеводства -->
+        </select>
+        <small class="muted">
+          Для M1 используем общенациональные вилки: ниже минимальной / около минимальной / 1–1.5× / 1.5–2.5× / &gt;2.5×.
+          Позже подставим точные пороги и нюансы по основаниям.
+        </small>
       </label>
 
       <div id="student_extra" class="card hidden">
@@ -87,55 +122,99 @@
 </div>
 
 <script type="module">
-  import { i18n, initLangSwitcher, isLatinName, isDDMMYYYY, $ } from './utils.js';
+  import { i18n, initLangSwitcher, isLatinName, $, isDDMMYYYY } from './utils.js';
   import { initTelegram } from './auth.js';
   import { saveQuestionnaire } from './api.js';
 
-  initTelegram();
-  await i18n.load(localStorage.getItem('lang')||'ru');
-  initLangSwitcher();
+  // инициализация
+  function initIncomeOptions(){
+    const level = document.getElementById('income_level');
+    level.innerHTML = `
+      <option value="below_min">Ниже минимальной</option>
+      <option value="around_min">Около минимальной</option>
+      <option value="min_to_1_5">От минимальной до 1.5×</option>
+      <option value="1_5_to_2_5">1.5× — 2.5×</option>
+      <option value="above_2_5">Выше 2.5×</option>
+    `;
+  }
+  function onVoivodeshipChange(){
+    // На будущее: здесь можем менять набор вилок под конкретное воеводство.
+    initIncomeOptions();
+  }
 
-  const statusEl = $('#status');
-  const studBox = $('#student_extra');
-  const nsBox = $('#nostatus_extra');
+  async function boot(){
+    initTelegram();
+    await i18n.load(localStorage.getItem('lang')||'ru');
+    initLangSwitcher();
 
-  const toggleExtras = ()=>{
-    studBox.classList.toggle('hidden', statusEl.value!=='student');
-    nsBox.classList.toggle('hidden', statusEl.value!=='no_status');
-  };
-  statusEl.addEventListener('change', toggleExtras);
-  toggleExtras();
+    // восстановим активное состояние кнопок языка корректно
+    document.documentElement.setAttribute('lang', i18n.lang);
 
-  $('#prev').onclick = ()=> history.back();
+    const statusEl = $('#status');
+    const studBox = $('#student_extra');
+    const nsBox = $('#nostatus_extra');
 
-  $('#next').onclick = ()=>{
-    const first = $('#first_name').value.trim();
-    const last = $('#last_name').value.trim();
-    const birth = $('#birth').value.trim();
-    if(!isLatinName(first) || !isLatinName(last)){ alert('Имя/фамилия: только латиница, минимум 2 символа'); return; }
-    if(!isDDMMYYYY(birth)){ alert('Дата рождения в формате ДД.ММ.ГГГГ'); return; }
-    const q = {
-      first, last, birth,
-      citizenship: $('#citizenship').value,
-      status: statusEl.value
+    const toggleExtras = ()=>{
+      studBox.classList.toggle('hidden', statusEl.value!=='student');
+      nsBox.classList.toggle('hidden', statusEl.value!=='no_status');
     };
-    if(statusEl.value==='student'){
-      q.student = {
-        inst: $('#stud_inst').value.trim(),
-        doc: $('#stud_doc').value,
-        start: $('#stud_start').value.trim(),
-        end: $('#stud_end').value.trim()
+    statusEl.addEventListener('change', toggleExtras);
+    toggleExtras();
+
+    // зависимые поля
+    document.getElementById('voivodeship').addEventListener('change', onVoivodeshipChange);
+    onVoivodeshipChange();
+
+    // кнопки
+    $('#prev').onclick = ()=> history.back();
+
+    $('#next').onclick = ()=>{
+      const first = $('#first_name').value.trim();
+      const last  = $('#last_name').value.trim();
+
+      if(!isLatinName(first) || !isLatinName(last)){
+        alert('Имя/фамилия: только латиница, минимум 2 символа'); return;
+      }
+
+      const q = {
+        first, last,
+        citizenship: $('#citizenship').value,
+        status: $('#status').value,
+        voivodeship: $('#voivodeship').value,
+        income_level: $('#income_level').value
       };
-    }
-    if(statusEl.value==='no_status'){
-      q.no_status = {
-        last_entry: $('#ns_entry').value.trim(),
-        has_offer: $('#ns_offer').value==='yes'
-      };
-    }
-    saveQuestionnaire(q);
-    location.href = './questionnaire-preview.html';
-  };
+
+      if(q.status==='student'){
+        q.student = {
+          inst: $('#stud_inst').value.trim(),
+          doc: $('#stud_doc').value,
+          start: $('#stud_start').value.trim(),
+          end: $('#stud_end').value.trim()
+        };
+        // даты в студент-блоке — опциональны; если указали, проверим формат
+        if(q.student.start && !isDDMMYYYY(q.student.start)){ alert('Дата начала: формат ДД.ММ.ГГГГ'); return; }
+        if(q.student.end && !isDDMMYYYY(q.student.end)){ alert('Дата окончания: формат ДД.ММ.ГГГГ'); return; }
+      }
+      if(q.status==='no_status'){
+        q.no_status = {
+          last_entry: $('#ns_entry').value.trim(),
+          has_offer: $('#ns_offer').value==='yes'
+        };
+        if(q.no_status.last_entry && !isDDMMYYYY(q.no_status.last_entry)){ alert('Дата последнего въезда: формат ДД.ММ.ГГГГ'); return; }
+      }
+
+      saveQuestionnaire(q);
+      location.href = './questionnaire-preview.html';
+    };
+
+    // фикс для возврата «назад» из bfcache
+    window.addEventListener('pageshow', async ()=>{
+      await i18n.load(localStorage.getItem('lang')||'ru');
+      initLangSwitcher();
+    });
+  }
+
+  boot();
 </script>
 </body>
 </html>
