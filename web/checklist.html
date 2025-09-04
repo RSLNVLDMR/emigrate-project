@@ -1,0 +1,103 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8" />
+  <title>Чеклист — eMigrant</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <script src="https://telegram.org/js/telegram-web-app.js"></script>
+  <link rel="stylesheet" href="./styles.css" />
+</head>
+<body>
+<div class="screen">
+  <div class="container">
+    <div class="header">
+      <div class="col">
+        <div class="h1" data-i18n="cl_title">Ваш чеклист</div>
+        <div class="row" style="gap:8px">
+          <span class="muted" data-i18n="cl_progress">Прогресс</span>
+          <div class="progress" style="flex:1"><span id="bar"></span></div>
+          <span id="pct" class="badge">0%</span>
+        </div>
+      </div>
+      <div class="lang">
+        <button data-lang="ru" class="active">RU</button><button data-lang="ua">UA</button><button data-lang="by">BY</button>
+      </div>
+    </div>
+
+    <div id="path_name" class="badge">—</div>
+    <div id="list" class="list" style="margin-top:12px"></div>
+  </div>
+
+  <div class="tabs">
+    <a class="tab" href="./translator.html" data-i18n="nav_translator">Переводчик</a>
+    <a class="tab" href="./checklist.html" data-i18n="nav_checklist">Чеклист</a>
+    <a class="tab" href="./consultant.html" data-i18n="nav_consultant">Консультант</a>
+  </div>
+</div>
+
+<script type="module">
+  import { i18n, initLangSwitcher, $, $$, decidePath, CHECKLISTS, storage, computeProgress } from './utils.js';
+  import { initTelegram } from './auth.js';
+  import { getQuestionnaire, getChecklist, saveChecklist } from './api.js';
+
+  initTelegram();
+  await i18n.load(localStorage.getItem('lang')||'ru');
+  initLangSwitcher();
+
+  const q = getQuestionnaire();
+  const pathId = decidePath(q);
+  const pathNames = {
+    pobyt_study:'Pobyt czasowy — обучение',
+    regularize:'Легализация (определить основание)',
+    pesel_support:'Поддержка PESEL-UKR',
+    asylum_support:'Беженство — сопровождение',
+    pobyt_support:'Действующая karta pobytu — сопровождение'
+  };
+  $('#path_name').textContent = pathNames[pathId] || pathId;
+
+  let items = getChecklist(pathId);
+  if(!items){
+    items = CHECKLISTS[pathId].map(x=>({ ...x, done:false }));
+    saveChecklist(pathId, items);
+  }
+
+  const render = ()=>{
+    const list = $('#list');
+    list.innerHTML = '';
+    items.forEach((it,idx)=>{
+      const aHref = moduleLink(it.slug);
+      const row = document.createElement('div');
+      row.className = 'item';
+      row.innerHTML = `
+        <div class="checkbox ${it.done?'done':''}" data-idx="${idx}">${it.done?'✓':''}</div>
+        <div class="col" style="flex:1">
+          <a href="${aHref}"><b>${it.title}</b></a>
+          <small class="muted">${aHref.includes('#todo')?'(в разработке)':''}</small>
+        </div>
+      `;
+      list.appendChild(row);
+    });
+    const pct = computeProgress(items);
+    $('#bar').style.width = pct + '%';
+    $('#pct').textContent = pct + '%';
+    $$('.checkbox').forEach(cb=>{
+      cb.onclick = ()=>{
+        const i = Number(cb.dataset.idx);
+        items[i].done = !items[i].done;
+        saveChecklist(pathId, items);
+        render();
+      };
+    });
+  };
+
+  const moduleLink = (slug)=>{
+    if(slug==='student-zaswiadczenie') return './module-student-zaswiadczenie.html';
+    if(slug==='choose-basis') return './module-no-status-basis.html';
+    // остальные модули пока-заглушки
+    return '#todo';
+  };
+
+  render();
+</script>
+</body>
+</html>
