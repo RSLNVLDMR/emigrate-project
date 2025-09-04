@@ -36,7 +36,7 @@
 <script type="module">
   import { i18n, initLangSwitcher } from './utils.js';
   import { initTelegram } from './auth.js';
-  window.BOT_USERNAME = 'your_bot_username_here'; /* set real bot username */
+  window.BOT_USERNAME = 'testmigratebot'; /* set real bot username */
   initTelegram();
   await i18n.load(localStorage.getItem('lang')||'ru');
   initLangSwitcher();
