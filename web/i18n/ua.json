@@ -58,9 +58,11 @@
 
   "cl_title": "Ваш чеклист",
   "cl_progress": "Прогрес",
+
   "nav_translator": "Перекладач",
   "nav_checklist": "Чеклист",
   "nav_consultant": "Консультант",
+
   "translator_title": "AI перекладач",
   "translator_from": "З мови",
   "translator_to": "На мову",
@@ -70,5 +72,25 @@
   "consult_topic": "Коротко опишіть запит",
   "consult_msg": "Повідомлення/деталі",
   "consult_open_chat": "Відкрити чат у Telegram",
-  "legal_title": "Політика конфіденційності та умови"
+  "legal_title": "Політика конфіденційності та умови",
+
+  "path.pobyt_study": "Pobyt czasowy — навчання",
+  "path.regularize": "Легалізація (визначити підставу)",
+  "path.pesel_support": "Підтримка PESEL-UKR",
+  "path.asylum_support": "Біженство — супровід",
+  "path.pobyt_support": "Чинна karta pobytu — супровід",
+
+  "item.student_zaswiadczenie": "Zaświadczenie z uczelni",
+  "item.photo_fee_wniosek": "Фото, оплата, wniosek",
+  "item.visit_biometrics": "Візит і біометрія",
+  "item.choose_basis": "Визначити підставу (робота/навчання/сім'я)",
+  "item.collect_docs": "Зібрати документи за підставою",
+  "item.submit_pobyt": "Подача на pobyt czasowy",
+  "item.pesel_rights": "Права та підтвердження за PESEL-UKR",
+  "item.work_insurance": "Робота та страхування",
+  "item.address": "Адреса/мельдунек",
+  "item.asylum_brief": "Хід процедури та права",
+  "item.parallel_options": "Паралельні опції (навчання/робота)",
+  "item.obligations": "Поточні обов'язки та продовження",
+  "item.employer_change": "Зміна роботодавця (за потреби)"
 }
