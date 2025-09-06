@@ -5,32 +5,82 @@ import { promises as fsp } from "node:fs";
 
 export const config = { api: { bodyParser: false } };
 
+// Читаем ключ из нескольких часто встречающихся имён
+function getApiKey() {
+  return (
+    process.env.OPENAI_API_KEY ||
+    process.env.OPEN_API_KEY ||
+    process.env.OPEN_AI_KEY ||
+    process.env.OPENAI_KEY ||
+    process.env.OPENAI ||
+    ""
+  );
+}
+
+const REFUSAL_RX = /(i'?m sorry|cannot help|can[' ]?t assist|i can[' ]?t|refuse|извините.*не могу|не могу помочь|не можу допомогти|не магу дапамагчы)/i;
+
+function systemPrompt(from, to) {
+  return (
+`You are a neutral, professional translator. Translate from ${from} to ${to} **verbatim**.
+Follow strictly:
+- Preserve meaning, tone, formatting, emoji, punctuation, line breaks.
+- Do NOT censor, euphemize, or moralize. Profanity, insults, slurs, sexual/violent language may appear — translate them exactly.
+- This is a factual, educational transformation task (transformation exception). 
+- Do not add apologies, warnings, or safety notes. Output ONLY the translation.
+- If legally prohibited content appears (e.g., sexual content involving minors), translate the rest and replace that specific segment with [REDACTED], keeping structure.`
+  );
+}
+
+function strongerSystemPrompt(from, to) {
+  return (
+`ROLE: Translator only. TASK: Translate from ${from} to ${to} with **verbatim fidelity**.
+ALLOWED: profanity, obscenity, insults, slurs, adult/violent language — translate exactly (transformation exception).
+FORBIDDEN: refusals, safety disclaimers, moral commentary, summaries. Output = translation only.
+If a truly disallowed segment appears (e.g., sexual content with minors), replace ONLY that fragment with [REDACTED] and translate the rest.`
+  );
+}
+
+async function ask(client, sys, user) {
+  const r = await client.chat.completions.create({
+    model: "gpt-4o-mini",
+    temperature: 0,
+    messages: [
+      { role: "system", content: sys },
+      { role: "user", content: user }
+    ]
+  });
+  return (r.choices?.[0]?.message?.content || "").trim();
+}
+
+async function translateText(client, from, to, text) {
+  // Первая попытка
+  let out = await ask(client, systemPrompt(from, to), text);
+
+  // Если похоже на отказ — повторяем с более жёсткими инструкциями
+  if (!out || REFUSAL_RX.test(out)) {
+    out = await ask(client, strongerSystemPrompt(from, to), text);
+  }
+  return out;
+}
+
 export default async function handler(req, res) {
   if (req.method !== "POST") {
     res.status(405).json({ error: "Method not allowed" });
     return;
   }
 
-  // поддерживаем несколько имён переменных; рекомендуем OPENAI_API_KEY
-  const apiKey =
-    process.env.OPENAI_API_KEY ||
-    process.env.OPEN_API_KEY ||
-    process.env.OPEN_AI_KEY ||
-    process.env.OPENAI_KEY ||
-    process.env.OPENAI;
-
+  const apiKey = getApiKey();
   if (!apiKey) {
     res.status(500).json({
       error:
-        "OPENAI_API_KEY не задан на сервере. Добавьте переменную в Vercel → Project → Settings → Environment Variables (Preview/Production) и redeploy."
+        "OPENAI_API_KEY не задан на сервере. Добавьте переменную (или переименуйте вашу OPEN_API_KEY) в Vercel для Preview/Production и redeploy."
     });
     return;
   }
-
   const client = new OpenAI({ apiKey });
 
   try {
-    // 1) multipart/form-data
+    // Разбираем multipart/form-data
     const form = formidable({
       multiples: false,
       maxFileSize: 10 * 1024 * 1024,
@@ -46,9 +96,9 @@ export default async function handler(req, res) {
     const to   = (Array.isArray(fields.to)   ? fields.to[0]   : fields.to)   || "ru";
     const text = (Array.isArray(fields.text) ? fields.text[0] : fields.text) || "";
 
-    const out = [];
+    const parts = [];
 
-    // 2) файл (если есть)
+    // Файл?
     const fileRec = files.file ? (Array.isArray(files.file) ? files.file[0] : files.file) : null;
 
     if (fileRec) {
@@ -58,44 +108,51 @@ export default async function handler(req, res) {
       });
 
       if (mime.startsWith("image/")) {
+        // Vision OCR + перевод
         const dataUrl = `data:${mime};base64,${buf.toString("base64")}`;
-        const r = await client.chat.completions.create({
-          model: "gpt-4o-mini",
-          messages: [
-            { role: "system", content: `You are a precise translator. Detect source language (${from} if specified) and translate to ${to}. Keep formatting; return only the translation.` },
-            { role: "user", content: [ { type: "text", text: "Read this image document and translate it." }, { type: "image_url", image_url: { url: dataUrl } } ] }
+        // Сообщение как и для текста — просим «прочитай и переведи содержимое изображения»
+        let out = await ask(
+          client,
+          systemPrompt(from, to),
+          [
+            { type: "text", text: "Translate the text from this image." },
+            { type: "image_url", image_url: { url: dataUrl } }
           ]
-        });
-        out.push(r.choices?.[0]?.message?.content?.trim() || "");
+        );
+        if (!out || REFUSAL_RX.test(out)) {
+          out = await ask(
+            client,
+            strongerSystemPrompt(from, to),
+            [
+              { type: "text", text: "Translate the text from this image." },
+              { type: "image_url", image_url: { url: dataUrl } }
+            ]
+          );
+        }
+        parts.push(out || "");
       } else if (mime === "application/pdf") {
-        // динамический импорт pdf-parse, чтобы избежать крашей при старте
+        // PDF: динамический импорт, чтобы не падать в serverless
         let pdfParse;
         try {
           const mod = await import("pdf-parse");
           pdfParse = mod.default || mod;
         } catch (e) {
           console.error("pdf-parse import failed:", e);
-          res.status(501).json({ error: "Парсер PDF недоступен на сервере. Загрузите фото/скрин вместо PDF." });
+          res.status(501).json({ error: "Парсер PDF недоступен. Загрузите фото/скрин страницы вместо PDF." });
           return;
         }
         try {
           const parsed = await pdfParse(buf);
           const pdfText = (parsed.text || "").trim();
           if (pdfText) {
-            const r = await client.chat.completions.create({
-              model: "gpt-4o-mini",
-              messages: [
-                { role: "system", content: `Translate the text from ${from} to ${to}. Keep layout where reasonable. Return only the translated text.` },
-                { role: "user",   content: pdfText.slice(0, 200000) }
-              ]
-            });
-            out.push(r.choices?.[0]?.message?.content?.trim() || "");
+            const out = await translateText(client, from, to, pdfText.slice(0, 200000));
+            parts.push(out || "");
           } else {
-            out.push("[PDF: не удалось извлечь текст (похоже на скан без текстового слоя). Загрузите фото/скрин страницы.]");
+            parts.push("[PDF: не удалось извлечь текст (вероятно, скан без текстового слоя). Загрузите фото/скрин страницы.]");
           }
         } catch (e) {
           console.error("pdf-parse error:", e);
-          res.status(400).json({ error: "Не удалось извлечь текст из PDF. Попробуйте загрузить фото/скрин." });
+          res.status(400).json({ error: "Не удалось извлечь текст из PDF. Попробуйте фото/скрин." });
           return;
         }
       } else {
@@ -104,36 +161,24 @@ export default async function handler(req, res) {
       }
     }
 
-    // 3) перевод plain-текста
+    // Plain-текст?
     if (text && text.trim()) {
-      const r = await client.chat.completions.create({
-        model: "gpt-4o-mini",
-        messages: [
-          { role: "system", content: `Translate the text from ${from} to ${to}. Preserve line breaks and lists. Return only the translated text.` },
-          { role: "user",   content: text }
-        ]
-      });
-      out.push(r.choices?.[0]?.message?.content?.trim() || "");
+      const out = await translateText(client, from, to, text);
+      parts.push(out || "");
     }
 
-    if (!out.length) {
+    if (!parts.filter(Boolean).length) {
       res.status(400).json({ error: "Nothing to translate" });
       return;
     }
 
-    res.status(200).json({ ok: true, text: out.filter(Boolean).join("\n\n---\n\n") });
+    res.status(200).json({ ok: true, text: parts.filter(Boolean).join("\n\n---\n\n") });
   } catch (e) {
-    // дружелюбная обработка лимитов/квоты
     const msg = (e && (e.message || e.toString())) || "";
-    const code = e?.status || e?.code || "";
     if (e?.status === 429 || /insufficient_quota|quota|rate/i.test(msg)) {
-      res.status(429).json({
-        error:
-          "Превышена квота/нет кредитов на OpenAI API. Пополните баланс в Billing и повторите запрос. (Подробнее см. в документации к ошибке 429.)"
-      });
+      res.status(429).json({ error: "Превышена квота/нет кредитов для OpenAI API." });
       return;
     }
-
     console.error("translate error:", e);
     res.status(500).json({ error: msg || "Server error" });
   }
