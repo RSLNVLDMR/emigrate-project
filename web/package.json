@@ -1,6 +1,6 @@
 {
-  "name": "emigrant-miniapp",
-  "version": "0.0.3",
+  "name": "emigrant-miniapp-web",
+  "version": "0.0.4",
   "private": true,
   "type": "module",
   "engines": { "node": ">=18" },
