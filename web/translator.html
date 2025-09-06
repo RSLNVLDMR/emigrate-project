@@ -7,41 +7,8 @@
   <script src="https://telegram.org/js/telegram-web-app.js"></script>
   <link rel="stylesheet" href="./styles.css" />
   <style>
-    .lang{position:relative;z-index:5}
-    .footer{position:sticky;bottom:0;z-index:4}
-    button,.btn,select,input,textarea{pointer-events:auto;touch-action:manipulation;-webkit-tap-highlight-color:transparent}
     .filecard{display:flex;align-items:center;gap:12px;border:1px solid var(--line);border-radius:12px;padding:10px 12px;margin-top:10px;background:transparent}
     .filethumb{width:48px;height:48px;border-radius:8px;border:1px solid var(--line);background:var(--card);display:flex;align-items:center;justify-content:center;overflow:hidden;font-weight:700;color:var(--muted)}
-
-    /* Результат — по умолчанию скрыт */
-    #result_label{display:none;margin-top:16px}
-    #out{display:none}
-
-    /* ——— Жёсткие оверрайды карточки результата ——— */
-    #out.show{display:block}
-    #out{
-      /* полностью отключаем «флексовость» и фикс-высоты базового .card */
-      display:block !important;
-      min-height:0 !important;
-      height:auto !important;
-      max-height:none !important;
-      align-items:stretch !important;
-      justify-content:flex-start !important;
-
-      /* компактные отступы, чтобы текст начинался почти у верхней границы */
-      padding:12px 14px !important;
-
-      /* типографика */
-      margin-top:8px;
-      white-space:pre-wrap;
-      line-height:1.45;
-    }
-    #out_text{
-      margin:0 !important;            /* убираем любые внешние отступы */
-      padding:0 !important;
-      display:block;
-    }
-
     .xbtn{background:transparent;border:1px solid var(--line);border-radius:8px;padding:4px 8px;cursor:pointer;color:var(--muted)}
   </style>
 </head>
@@ -91,12 +58,9 @@
       <small id="hint" class="muted" style="display:none"></small>
     </div>
 
-    <!-- Сабтайтл под кнопкой -->
+    <!-- Сабтайтл и карточка результата — скрыты стилями из styles.css -->
     <div id="result_label" class="h2" data-i18n="translator_result">Результат</div>
-    <!-- Адаптивная карточка результата -->
-    <div id="out" class="card">
-      <div id="out_text"></div>
-    </div>
+    <div id="out" class="card"><div id="out_text"></div></div>
   </div>
 
   <div class="tabs">
@@ -149,14 +113,13 @@
 
   function showResult(text){
     $('#result_label').style.display='block';
-    const t = (text||'—').replace(/^\s+/, ''); // убираем возможные лидирующие переносы
-    $('#out_text').textContent = t;
-    $('#out').classList.add('show');
+    $('#out_text').textContent = (text||'—').replace(/^\s+/, '');
+    $('#out').classList.add('show');         // включает display:block через CSS
   }
   function hideResult(){
     $('#result_label').style.display='none';
     $('#out_text').textContent='';
-    $('#out').classList.remove('show');
+    $('#out').classList.remove('show');      // карточка снова полностью скрыта
   }
 
   function bindActions(){ $('#go').onclick=async()=>{ const text=$('#src').value.trim(); if(!text && !selectedFile){alert(t('translator_err_empty')||'Нечего переводить');return;}
@@ -165,8 +128,9 @@
       catch(e){ alert((t('translator_err_server')||'Ошибка сервера')+': '+(e.message||'')); }
       finally{ setHint(''); } }; }
 
-  async function boot(){ bindLang(); await i18n.load(storage.get('lang','ru')); bindUploader(); bindActions(); }
-  document.addEventListener('DOMContentLoaded', boot); window.addEventListener('pageshow', boot);
+  async function boot(){ bindLang(); await i18n.load(storage.get('lang','ru')); bindUploader(); bindActions(); hideResult(); }
+  document.addEventListener('DOMContentLoaded', boot);
+  window.addEventListener('pageshow', boot);
 })();
 </script>
 </body>
