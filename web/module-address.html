@@ -26,7 +26,7 @@
 <div class="screen">
   <div class="container">
     <div class="header">
-      <div class="h1">Подтвердzenie адреса</div>
+      <div class="h1">Подтверждение адреса</div>
       <div class="lang">
         <button data-lang="ru" class="active">RU</button>
         <button data-lang="ua">UA</button>
@@ -129,15 +129,21 @@
     if(type==='ok') d.classList.add('ok'); else if(type==='err') d.classList.add('err');
   }
 
-  function clearPreview(){
+  // удалить только карточку/превью (НЕ трогая selectedFile и input.value)
+  function removeCardOnly(){
     if(cardEl){cardEl.remove();cardEl=null;}
     if(previewUrl){URL.revokeObjectURL(previewUrl);previewUrl=null;}
+  }
+
+  // полная очистка (по кнопке "Удалить")
+  function clearPreview(){
+    removeCardOnly();
     selectedFile=null;
     const inp=$('#file'); if(inp) inp.value='';
   }
 
   function makePreview(f){
-    clearPreview();
+    removeCardOnly(); // убираем старую карточку, файл оставляем
     const card=document.createElement('div'); card.className='filecard';
     const thumb=document.createElement('div'); thumb.className='filethumb';
     const col=document.createElement('div'); col.className='col'; col.style.flex='1';
@@ -164,7 +170,9 @@
     const ok=f.type.startsWith('image/') || f.type==='application/pdf';
     if(!ok){ alert('Поддерживаем только фото и PDF'); return; }
     if(f.size>MAX_MB*1024*1024){ alert('Файл больше '+MAX_MB+' МБ'); return; }
-    selectedFile=f; makePreview(f); setStatus(null,'Файл загружен — можно запускать проверку');
+    selectedFile=f;                // ⬅️ СНАЧАЛА запоминаем файл
+    makePreview(f);                // ⬅️ а превью больше НЕ обнуляет selectedFile
+    setStatus(null,'Файл загружен — можно запускать проверку');
   });
 
   function renderResult(data){
