@@ -98,7 +98,13 @@
       <hr />
 
       <div class="h2">Извлечённые поля</div>
-      <div id="extracted" class="p" style="white-space:pre-wrap;font-family:ui-monospace, Menlo, Consolas, monospace;background:var(--ink);border:1px solid var(--line);border-radius:12px;padding:12px"></div>
+      <!-- скрыто по дефолту, раскрывается пользователем -->
+      <details id="extractedWrap" style="background:var(--ink);border:1px solid var(--line);border-radius:12px;">
+        <summary id="extractedSummary" class="p" style="cursor:pointer;padding:12px">
+          Показать извлечённые поля
+        </summary>
+        <div id="extracted" class="p" style="padding:12px;border-top:1px solid var(--line);white-space:pre-wrap"></div>
+      </details>
 
       <small class="muted" style="display:block;margin-top:8px">Сообщение также придёт в бота.</small>
     </div>
@@ -123,6 +129,7 @@
     while(v>1024 && i<u.length-1){ v/=1024; i++; }
     return v.toFixed(v<10?1:0)+" "+u[i];
   }
+  // ЧЕЛОВЕКОЧИТАЕМЫЙ вывод без кавычек/скобок
   function humanFields(fields){
     const map = {
       full_name: "ФИО",
@@ -137,15 +144,13 @@
     };
     const order = ["full_name","address","postal_code","city","doc_date","valid_from","valid_to","issuer","signatures_present"];
     const lines = [];
-    lines.push("{");
     order.forEach((k)=>{
       const label = map[k] || k;
       let val = fields && (fields[k]!==undefined ? fields[k] : null);
       if (val === null || val === undefined || val === "") val = "—";
       if (typeof val === "boolean") val = val ? "да" : "нет";
-      lines.push(`  "${label}": ${typeof val==="string" ? `"${String(val)}"` : val}`);
+      lines.push(`${label}: ${val}`);
     });
-    lines.push("}");
     return lines.join("\n");
   }
   function verdictMessage(v, isProof){
@@ -250,6 +255,11 @@
       const pretty = humanFields(data.fieldsExtracted || {});
       $("#extracted").textContent = pretty;
 
+      // сворачиваем; юзер сам раскрывает
+      const det = $("#extractedWrap");
+      det.open = false;
+      $("#extractedSummary").textContent = "Показать извлечённые поля";
+
       $("#resultCard").style.display = "block";
 
       if (data.verdict === "pass") setStatus("ok","Проверка пройдена");
@@ -262,6 +272,13 @@
       $("#checkBtn").disabled = false;
     }
   };
+
+  // переключение текста summary при раскрытии
+  const det = document.getElementById("extractedWrap");
+  const sum = document.getElementById("extractedSummary");
+  det?.addEventListener("toggle", ()=>{
+    sum.textContent = det.open ? "Скрыть извлечённые поля" : "Показать извлечённые поля";
+  });
 
   // TG init
   const tg = window.Telegram && window.Telegram.WebApp;
