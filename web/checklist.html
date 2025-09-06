@@ -109,6 +109,7 @@
   function moduleLink(slug){
     if(slug==='student-zaswiadczenie') return './module-student-zaswiadczenie.html';
     if(slug==='choose-basis') return './module-no-status-basis.html';
+    if(slug==='address') return './module-address.html'; // ⬅️ наш новый модуль
     return '#todo';
   }
   function computeProgress(items){ const done = items.filter(x=>x.done).length; return Math.round((done / Math.max(items.length,1)) * 100); }
@@ -133,7 +134,11 @@
     items.forEach((it, idx)=>{
       const row = document.createElement('div');
       row.className = 'item';
-      const title = it.i18n ? t(it.i18n) : (it.title||'');
+
+      // Показываем новое имя для пункта address
+      let title = it.i18n ? t(it.i18n) : (it.title||'');
+      if (it.slug === 'address') title = 'Подтверждение адреса';
+
       const link = moduleLink(it.slug);
       row.innerHTML = `
         <div class="checkbox ${it.done?'done':''}" data-idx="${idx}">${it.done?'✓':''}</div>
