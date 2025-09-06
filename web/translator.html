@@ -10,20 +10,9 @@
     .lang{position:relative;z-index:5}
     .footer{position:sticky;bottom:0;z-index:4}
     button,.btn,select,input,textarea{pointer-events:auto;touch-action:manipulation;-webkit-tap-highlight-color:transparent}
-
-    /* карточка выбранного файла (создаём динамически) */
-    .filecard{
-      display:flex; align-items:center; gap:12px;
-      border:1px solid var(--line); border-radius:12px; padding:10px 12px; margin-top:10px;
-      background: transparent;
-    }
-    .filethumb{
-      width:48px;height:48px;border-radius:8px;border:1px solid var(--line);
-      background: var(--card); display:flex; align-items:center; justify-content:center; overflow:hidden;
-      font-weight:700; color: var(--muted);
-    }
-    #out{display:none}
-    #out.show{display:block}
+    .filecard{display:flex;align-items:center;gap:12px;border:1px solid var(--line);border-radius:12px;padding:10px 12px;margin-top:10px;background:transparent}
+    .filethumb{width:48px;height:48px;border-radius:8px;border:1px solid var(--line);background:var(--card);display:flex;align-items:center;justify-content:center;overflow:hidden;font-weight:700;color:var(--muted)}
+    #out{display:none} #out.show{display:block}
     .xbtn{background:transparent;border:1px solid var(--line);border-radius:8px;padding:4px 8px;cursor:pointer;color:var(--muted)}
   </style>
 </head>
@@ -43,21 +32,13 @@
       <label class="col" style="flex:1">
         <span data-i18n="translator_from">С языка</span>
         <select id="from" class="input">
-          <option value="ru">RU</option>
-          <option value="pl">PL</option>
-          <option value="ua">UA</option>
-          <option value="by">BY</option>
-          <option value="en">EN</option>
+          <option value="ru">RU</option><option value="pl">PL</option><option value="ua">UA</option><option value="by">BY</option><option value="en">EN</option>
         </select>
       </label>
       <label class="col" style="flex:1">
         <span data-i18n="translator_to">На язык</span>
         <select id="to" class="input">
-          <option value="pl">PL</option>
-          <option value="ru">RU</option>
-          <option value="ua">UA</option>
-          <option value="by">BY</option>
-          <option value="en">EN</option>
+          <option value="pl">PL</option><option value="ru">RU</option><option value="ua">UA</option><option value="by">BY</option><option value="en">EN</option>
         </select>
       </label>
     </div>
@@ -69,14 +50,10 @@
 
     <div class="col" style="margin-top:10px">
       <small class="muted" data-i18n="translator_or">или загрузите документ (фото/PDF):</small>
-
-      <!-- мобильный аплоад (без drag-n-drop) -->
       <div class="row" style="gap:8px">
         <input id="file" type="file" accept="application/pdf,image/*" hidden />
         <button id="pick" type="button" class="btn secondary" data-i18n="translator_select">Выбрать файл</button>
       </div>
-
-      <!-- сюда динамически вставим карточку файла, если он выбран -->
       <div id="filewrap"></div>
     </div>
 
@@ -100,137 +77,50 @@
 
 <script>
 (function(){
-  const $ = (s,r=document)=>r.querySelector(s);
-  const $$ = (s,r=document)=>Array.from(r.querySelectorAll(s));
-  const storage = { get(k,d=null){try{return JSON.parse(localStorage.getItem(k))??d}catch{return d}}, set(k,v){localStorage.setItem(k,JSON.stringify(v))} };
+  const $=(s,r=document)=>r.querySelector(s); const $$=(s,r=document)=>Array.from(r.querySelectorAll(s));
+  const storage={get(k,d=null){try{return JSON.parse(localStorage.getItem(k))??d}catch{return d}},set(k,v){localStorage.setItem(k,JSON.stringify(v))}};
 
   // i18n
-  const i18n = { lang: storage.get('lang','ru'), dict:{}, async load(lang){
-      const use = lang || i18n.lang;
-      try{ const res = await fetch(`./i18n/${use}.json`, {cache:'no-store'});
-        if(res.ok){ i18n.dict = await res.json(); i18n.lang = use; storage.set('lang',use); } } catch(e){}
-      apply(); highlightLang();
-    } };
-  const t = k => i18n.dict[k] || k;
-  function apply(){ $$('[data-i18n]').forEach(el=>{
-      const k=el.getAttribute('data-i18n');
-      if(i18n.dict[k]){ if(el.tagName==='TEXTAREA') el.setAttribute('placeholder', i18n.dict[k]); else el.textContent=i18n.dict[k]; } });
-    document.documentElement.setAttribute('lang', i18n.lang); }
+  const i18n={lang:storage.get('lang','ru'),dict:{},async load(lang){const use=lang||i18n.lang;try{const res=await fetch(`./i18n/${use}.json`,{cache:'no-store'});if(res.ok){i18n.dict=await res.json();i18n.lang=use;storage.set('lang',use);}}catch(e){}apply();highlightLang();}};
+  const t=k=>i18n.dict[k]||k;
+  function apply(){ $$('[data-i18n]').forEach(el=>{const k=el.getAttribute('data-i18n'); if(i18n.dict[k]){ if(el.tagName==='TEXTAREA') el.setAttribute('placeholder', i18n.dict[k]); else el.textContent=i18n.dict[k]; }}); document.documentElement.setAttribute('lang', i18n.lang); }
   function highlightLang(){ $$('.lang button').forEach(b=> b.classList.toggle('active', b.dataset.lang===i18n.lang)); }
-  function bindLang(){ $$('.lang button').forEach(b=> b.onclick = ()=> i18n.load(b.dataset.lang)); }
+  function bindLang(){ $$('.lang button').forEach(b=> b.onclick=()=>i18n.load(b.dataset.lang)); }
 
   // Telegram
-  (function(){ const tg=window.Telegram&&window.Telegram.WebApp; if(!tg) return; tg.expand(); tg.ready(); })();
+  (function(){const tg=window.Telegram&&window.Telegram.WebApp; if(!tg)return; tg.expand(); tg.ready();})();
 
-  // ====== Upload (без drag-n-drop). Карточка создаётся/удаляется динамически ======
-  const MAX_MB=10;
-  let selectedFile=null;
-  let previewUrl=null;
-  let fileCardEl=null;
+  // Upload (без dnd)
+  const MAX_MB=10; let selectedFile=null; let previewUrl=null; let fileCardEl=null;
+  const humanSize=b=>{const mb=b/1024/1024; return mb>=1?mb.toFixed(2)+' MB':(b/1024).toFixed(0)+' KB';};
+  function removeFileCard(){ if(fileCardEl){fileCardEl.remove();fileCardEl=null;} if(previewUrl){URL.revokeObjectURL(previewUrl);previewUrl=null;} }
+  function clearFile(){ selectedFile=null; $('#file').value=''; removeFileCard(); }
+  function createFileCard(file){ removeFileCard(); const card=document.createElement('div'); card.className='filecard';
+    const thumb=document.createElement('div'); thumb.className='filethumb';
+    const col=document.createElement('div'); col.className='col'; col.style.flex='1';
+    const nameEl=document.createElement('div'); nameEl.className='p'; nameEl.textContent=file.name;
+    const meta=document.createElement('small'); meta.className='muted'; meta.textContent=`${file.type||'binary'} · ${humanSize(file.size)}`;
+    const btn=document.createElement('button'); btn.className='xbtn'; btn.textContent=t('translator_remove')||'Удалить'; btn.onclick=clearFile;
+    if(file.type.startsWith('image/')){ previewUrl=URL.createObjectURL(file); thumb.innerHTML=`<img src="${previewUrl}" alt="preview" style="width:100%;height:100%;object-fit:cover;border-radius:6px">`; } else { thumb.textContent='PDF'; }
+    col.appendChild(nameEl); col.appendChild(meta); card.appendChild(thumb); card.appendChild(col); card.appendChild(btn);
+    $('#filewrap').appendChild(card); fileCardEl=card; }
+  function acceptFile(file){ if(!file)return; const ok=file.type.startsWith('image/')||file.type==='application/pdf';
+    if(!ok){alert(t('translator_err_type'));return;} if(file.size>MAX_MB*1024*1024){alert((t('translator_err_size')||'Файл больше {mb} МБ').replace('{mb}',MAX_MB));return;}
+    selectedFile=file; createFileCard(file); }
+  function bindUploader(){ $('#pick').onclick=()=>$('#file').click(); $('#file').addEventListener('change',e=>acceptFile(e.target.files?.[0])); clearFile(); }
 
-  const humanSize = bytes => { const mb=bytes/1024/1024; return mb>=1?mb.toFixed(2)+' MB':(bytes/1024).toFixed(0)+' KB'; };
+  // API
+  async function callAPI({text,from,to,file}){ const fd=new FormData(); fd.append('from',from); fd.append('to',to); if(text) fd.append('text',text); if(file) fd.append('file',file,file.name);
+    const res=await fetch('/api/translate',{method:'POST',body:fd}); const data=await res.json().catch(()=>({})); if(!res.ok) throw new Error(data.error||'Server error'); return data.text; }
+  function setHint(msg){ const h=$('#hint'); if(msg){h.textContent=msg; h.style.display='block';} else h.style.display='none'; }
+  function bindActions(){ $('#go').onclick=async()=>{ const text=$('#src').value.trim(); if(!text && !selectedFile){alert(t('translator_err_empty'));return;}
+      setHint(t('translator_processing')||'Обрабатываем…'); $('#out').classList.remove('show'); $('#out_text').textContent='';
+      try{ const out=await callAPI({text,from:$('#from').value,to:$('#to').value,file:selectedFile}); $('#out_text').textContent=out||'—'; $('#out').classList.add('show'); }
+      catch(e){ alert((t('translator_err_server')||'Ошибка сервера')+': '+(e.message||'')); }
+      finally{ setHint(''); } }; }
 
-  function removeFileCard(){
-    if(fileCardEl){ fileCardEl.remove(); fileCardEl=null; }
-    if(previewUrl){ URL.revokeObjectURL(previewUrl); previewUrl=null; }
-  }
-
-  function clearFile(){
-    selectedFile=null;
-    $('#file').value='';
-    removeFileCard(); // карточки нет -> и UI «чистый»
-  }
-
-  function createFileCard(file){
-    removeFileCard(); // на всякий случай
-
-    const card = document.createElement('div');
-    card.className = 'filecard';
-    const thumb = document.createElement('div');
-    thumb.className = 'filethumb';
-    const col = document.createElement('div');
-    col.className = 'col';
-    col.style.flex = '1';
-    const nameEl = document.createElement('div');
-    nameEl.className = 'p';
-    const meta = document.createElement('small');
-    meta.className = 'muted';
-    const btn = document.createElement('button');
-    btn.className = 'xbtn';
-    btn.textContent = t('translator_remove') || 'Удалить';
-
-    nameEl.textContent = file.name;
-    meta.textContent = `${file.type || 'binary'} · ${humanSize(file.size)}`;
-
-    if(file.type.startsWith('image/')){
-      previewUrl = URL.createObjectURL(file);
-      thumb.innerHTML = `<img src="${previewUrl}" alt="preview" style="width:100%;height:100%;object-fit:cover;border-radius:6px">`;
-    } else {
-      thumb.textContent = 'PDF';
-    }
-
-    btn.onclick = clearFile;
-
-    col.appendChild(nameEl); col.appendChild(meta);
-    card.appendChild(thumb); card.appendChild(col); card.appendChild(btn);
-
-    $('#filewrap').appendChild(card);
-    fileCardEl = card;
-  }
-
-  function acceptFile(file){
-    if(!file) return;
-    const okType = file.type.startsWith('image/') || file.type === 'application/pdf';
-    if(!okType){ alert(t('translator_err_type')); return; }
-    if(file.size > MAX_MB*1024*1024){ alert((t('translator_err_size')||'Файл больше {mb} МБ').replace('{mb}',MAX_MB)); return; }
-    selectedFile = file;
-    createFileCard(file);
-  }
-
-  function bindUploader(){
-    $('#pick').onclick = ()=> $('#file').click();
-    $('#file').addEventListener('change', e=> acceptFile(e.target.files?.[0]));
-    // старт — без карточки и без данных
-    clearFile();
-  }
-
-  // ====== API ======
-  async function callAPI({text,from,to,file}){
-    const fd=new FormData();
-    fd.append('from',from); fd.append('to',to);
-    if(text) fd.append('text',text);
-    if(file) fd.append('file',file,file.name);
-    const res=await fetch('/api/translate',{method:'POST', body:fd});
-    const data=await res.json().catch(()=>({}));
-    if(!res.ok) throw new Error(data.error||'Server error');
-    return data.text;
-  }
-  function setHint(msg){ const h=$('#hint'); if(msg){ h.textContent=msg; h.style.display='block'; } else h.style.display='none'; }
-
-  function bindActions(){
-    $('#go').onclick = async ()=>{
-      const text=$('#src').value.trim();
-      if(!text && !selectedFile){ alert(t('translator_err_empty')); return; }
-      setHint(t('translator_processing') || 'Обрабатываем…');
-      $('#out').classList.remove('show'); $('#out_text').textContent='';
-      try{
-        const out=await callAPI({text,from:$('#from').value,to:$('#to').value,file:selectedFile});
-        $('#out_text').textContent=out||'—';
-        $('#out').classList.add('show');
-      }catch(e){
-        alert((t('translator_err_server')||'Ошибка сервера')+': '+(e.message||'')); 
-      }finally{ setHint(''); }
-    };
-  }
-
-  async function boot(){
-    bindLang();
-    await i18n.load(storage.get('lang','ru'));
-    bindUploader();
-    bindActions();
-  }
-  document.addEventListener('DOMContentLoaded', boot);
-  window.addEventListener('pageshow', boot);
+  async function boot(){ bindLang(); await i18n.load(storage.get('lang','ru')); bindUploader(); bindActions(); }
+  document.addEventListener('DOMContentLoaded', boot); window.addEventListener('pageshow', boot);
 })();
 </script>
 </body>
