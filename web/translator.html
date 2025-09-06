@@ -12,7 +12,9 @@
     button,.btn,select,input,textarea{pointer-events:auto;touch-action:manipulation;-webkit-tap-highlight-color:transparent}
     .filecard{display:flex;align-items:center;gap:12px;border:1px solid var(--line);border-radius:12px;padding:10px 12px;margin-top:10px;background:transparent}
     .filethumb{width:48px;height:48px;border-radius:8px;border:1px solid var(--line);background:var(--card);display:flex;align-items:center;justify-content:center;overflow:hidden;font-weight:700;color:var(--muted)}
-    #out{display:none} #out.show{display:block}
+    #out{display:none}
+    #out.show{display:block}
+    #result_label{display:none;margin-top:16px}
     .xbtn{background:transparent;border:1px solid var(--line);border-radius:8px;padding:4px 8px;cursor:pointer;color:var(--muted)}
   </style>
 </head>
@@ -62,8 +64,10 @@
       <small id="hint" class="muted" style="display:none"></small>
     </div>
 
-    <div id="out" class="card" style="margin-top:12px;white-space:pre-wrap">
-      <div class="h2" data-i18n="translator_result">Результат</div>
+    <!-- Сабтайтл под кнопкой -->
+    <div id="result_label" class="h2" data-i18n="translator_result">Результат</div>
+    <!-- Карточка с ответом. Только текст внутри, без заголовка -->
+    <div id="out" class="card" style="margin-top:8px;white-space:pre-wrap;">
       <div id="out_text"></div>
     </div>
   </div>
@@ -106,7 +110,8 @@
     col.appendChild(nameEl); col.appendChild(meta); card.appendChild(thumb); card.appendChild(col); card.appendChild(btn);
     $('#filewrap').appendChild(card); fileCardEl=card; }
   function acceptFile(file){ if(!file)return; const ok=file.type.startsWith('image/')||file.type==='application/pdf';
-    if(!ok){alert(t('translator_err_type'));return;} if(file.size>MAX_MB*1024*1024){alert((t('translator_err_size')||'Файл больше {mb} МБ').replace('{mb}',MAX_MB));return;}
+    if(!ok){alert(t('translator_err_type')||'Неподдерживаемый тип файла');return;}
+    if(file.size>MAX_MB*1024*1024){alert((t('translator_err_size')||'Файл больше {mb} МБ').replace('{mb}',MAX_MB));return;}
     selectedFile=file; createFileCard(file); }
   function bindUploader(){ $('#pick').onclick=()=>$('#file').click(); $('#file').addEventListener('change',e=>acceptFile(e.target.files?.[0])); clearFile(); }
 
@@ -114,9 +119,22 @@
   async function callAPI({text,from,to,file}){ const fd=new FormData(); fd.append('from',from); fd.append('to',to); if(text) fd.append('text',text); if(file) fd.append('file',file,file.name);
     const res=await fetch('/api/translate',{method:'POST',body:fd}); const data=await res.json().catch(()=>({})); if(!res.ok) throw new Error(data.error||'Server error'); return data.text; }
   function setHint(msg){ const h=$('#hint'); if(msg){h.textContent=msg; h.style.display='block';} else h.style.display='none'; }
-  function bindActions(){ $('#go').onclick=async()=>{ const text=$('#src').value.trim(); if(!text && !selectedFile){alert(t('translator_err_empty'));return;}
-      setHint(t('translator_processing')||'Обрабатываем…'); $('#out').classList.remove('show'); $('#out_text').textContent='';
-      try{ const out=await callAPI({text,from:$('#from').value,to:$('#to').value,file:selectedFile}); $('#out_text').textContent=out||'—'; $('#out').classList.add('show'); }
+
+  // Показ результата: сначала показываем сабтайтл, затем карточку
+  function showResult(text){
+    $('#result_label').style.display='block';
+    $('#out_text').textContent=text||'—';
+    $('#out').classList.add('show');
+  }
+  function hideResult(){
+    $('#result_label').style.display='none';
+    $('#out_text').textContent='';
+    $('#out').classList.remove('show');
+  }
+
+  function bindActions(){ $('#go').onclick=async()=>{ const text=$('#src').value.trim(); if(!text && !selectedFile){alert(t('translator_err_empty')||'Нечего переводить');return;}
+      setHint(t('translator_processing')||'Обрабатываем…'); hideResult();
+      try{ const out=await callAPI({text,from:$('#from').value,to:$('#to').value,file:selectedFile}); showResult(out||'—'); }
       catch(e){ alert((t('translator_err_server')||'Ошибка сервера')+': '+(e.message||'')); }
       finally{ setHint(''); } }; }
 
