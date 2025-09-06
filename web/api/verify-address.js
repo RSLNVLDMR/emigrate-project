@@ -16,7 +16,7 @@ function getApiKey() {
   );
 }
 
-/* ---------- Правила ---------- */
+/* ---------- Правила для подсказки модели ---------- */
 const RULES = {
   common: `
 - Принимаются только документы, которые реально подтверждают адрес проживания в Польше сейчас.
@@ -59,7 +59,7 @@ const RULES = {
 `,
 };
 
-/* ---------- Выходная спецификация для модели ---------- */
+/* ---------- Формат требуемого JSON от модели ---------- */
 const OUTPUT_SPEC = `
 Верни СТРОГО JSON:
 {
@@ -96,6 +96,13 @@ function toYMD(d) {
   const day = String(d.getDate()).padStart(2, "0");
   return `${y}-${m}-${day}`;
 }
+function toDMY(d) {
+  if (!d) return null;
+  const day = String(d.getDate()).padStart(2, "0");
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const y = d.getFullYear();
+  return `${day}.${m}.${y}`;
+}
 function parseDate(s) {
   if (!s) return null;
   const iso = /^(\d{4})-(\d{2})-(\d{2})$/;
@@ -124,7 +131,7 @@ function addError(arr, code, title, detail, severity = "major") {
   arr.push({ code, title, detail, severity });
 }
 
-function isExpiredErr(e) {
+function isExpiryErr(e) {
   const t = norm(e.title);
   const c = norm(e.code);
   const d = norm(e.detail);
@@ -133,19 +140,22 @@ function isExpiredErr(e) {
     t.includes("истёк") ||
     t.includes("istek") ||
     t.includes("expired") ||
-    d.includes("valid_to")
+    d.includes("valid_to") ||
+    d.includes("закончился")
   );
 }
 function unifyExpiryErrors(errors, vTo) {
   const kept = [];
   let found = null;
   for (const e of errors || []) {
-    if (isExpiredErr(e)) {
+    if (isExpiryErr(e)) {
       if (!found) {
         found = {
           code: "expired",
           title: "Срок действия истёк",
-          detail: vTo ? `valid_to: ${toYMD(vTo)} < ${toYMD(TODAY)}.` : (e.detail || ""),
+          detail: vTo
+            ? `Срок действия закончился ${toDMY(vTo)}. Загрузите актуальный документ.`
+            : (e.detail || "Срок действия закончился. Загрузите актуальный документ."),
           severity: "critical",
         };
       }
@@ -157,7 +167,7 @@ function unifyExpiryErrors(errors, vTo) {
   return kept;
 }
 
-/** Жёсткая проверка пригодности документа */
+/** Жёсткая проверка пригодности документа + «человеческие» тексты */
 function ruleCheck(docType, modelJson) {
   const out = { ...modelJson };
   out.errors = Array.isArray(out.errors) ? [...out.errors] : [];
@@ -178,42 +188,91 @@ function ruleCheck(docType, modelJson) {
     );
   }
 
-  // 2) Сроки: ЕДИНСТВЕННОЕ сообщение про истечение при наличии valid_to
+  // 2) Сроки: одно «человеческое» сообщение при наличии valid_to
   if (vTo && vTo < TODAY) {
-    addError(out.errors, "expired", "Срок действия истёк", `valid_to: ${toYMD(vTo)} < ${toYMD(TODAY)}.`, "critical");
+    addError(
+      out.errors,
+      "expired",
+      "Срок действия истёк",
+      `Срок действия закончился ${toDMY(vTo)}. Загрузите актуальный документ.`,
+      "critical"
+    );
     out.errors = unifyExpiryErrors(out.errors, vTo);
   } else if (!vTo && docDate && monthsDiff(docDate, TODAY) > 12) {
-    // Нет valid_to — отдельная проверка «документ устарел» (оставляем)
-    addError(out.errors, "too_old", "Документ устарел", "Дата документа старше 12 месяцев.", "major");
+    // Нет valid_to — отдельная проверка «документ устарел»
+    addError(
+      out.errors,
+      "too_old",
+      "Документ устарел",
+      `Документ выдан более 12 месяцев назад (дата: ${toDMY(docDate)}). Нужен свежий документ.`,
+      "major"
+    );
   }
 
-  // 3) Тип-специфика
+  // 3) Тип-специфика (дружелюбные тексты)
   const title = norm(out.doc_kind || "");
   const issuer = norm(f.issuer || "");
 
   if (docType === "meldunek") {
     const hasIssuer =
-      containsAny(issuer, ["urząd", "urzad", "gmina", "miasto", " um ", " ug "]) || containsAny(title, ["meldunek", "zameld"]);
+      containsAny(issuer, ["urząd", "urzad", "gmina", "miasto", " um ", " ug "]) ||
+      containsAny(title, ["meldunek", "zameld"]);
     if (!hasIssuer)
-      addError(out.errors, "no_issuer", "Нет органа, выдавшего справку", "Для мелдунка обязателен орган (UM/UG/Urząd/Gmina/Miasto).", "critical");
+      addError(
+        out.errors,
+        "no_issuer",
+        "Не указан орган, выдавший справку",
+        "Для мелдунка обязателен орган (UM/UG/Urząd/Gmina/Miasto).",
+        "critical"
+      );
     if (f.signatures_present === false)
-      addError(out.errors, "no_stamp", "Нет печати/подписи", "Для мелдунка требуется печать/подпись/номер справки.", "major");
+      addError(
+        out.errors,
+        "no_stamp",
+        "Нет печати/подписи органа",
+        "Для мелдунка требуется печать/подпись/номер справки.",
+        "major"
+      );
   }
 
   if (docType === "lease_standard" || docType === "lease_okazjonalna") {
     if (!f.address || !f.postal_code || !f.city)
-      addError(out.errors, "address_incomplete", "Неполный адрес", "В договоре должен быть полный адрес (улица, дом/кв, индекс, город).", "critical");
+      addError(
+        out.errors,
+        "address_incomplete",
+        "Неполный адрес",
+        "В документе должен быть полный адрес: улица, дом/квартира, индекс и город.",
+        "critical"
+      );
     if (f.signatures_present === false)
-      addError(out.errors, "no_signatures", "Нет подписей сторон", "Для договора обязательны подписи Wynajмującego и Najemcy.", "critical");
+      addError(
+        out.errors,
+        "no_signatures",
+        "Нет подписей сторон",
+        "Нужны подписи собственника/арендодателя и квартиросъёмщика.",
+        "critical"
+      );
     if (docType === "lease_okazjonalna" && !containsAny(title, ["okazjonal"]))
-      addError(out.errors, "not_okazjonalna", "Не видно признаков najmu okazjonalnego", "Нужны: нотариальное заявление, адрес «na wypadek», согласие владельца.", "major");
+      addError(
+        out.errors,
+        "not_okazjonalna",
+        "Не видно признаков najmu okazjonalnego",
+        "Должны быть: нотариальное заявление, адрес «na wypadek» и согласие владельца.",
+        "major"
+      );
   }
 
   if (docType === "owner") {
     const ownershipMarks =
       containsAny(title, ["kw", "księga", "ksiega", "akt", "własno", "wlasno"]) || containsAny(issuer, ["sąd", "sad", "notariusz"]);
     if (!ownershipMarks)
-      addError(out.errors, "no_ownership_markers", "Нет признаков документа собственности", "Должны быть реквизиты KW/акт/нотариус/суд и заявление собственника.", "critical");
+      addError(
+        out.errors,
+        "no_ownership_markers",
+        "Нет признаков документа собственности",
+        "Нужны реквизиты собственности: № KW/акт/нотариус/суд и заявление собственника.",
+        "critical"
+      );
   }
 
   // Итоговый вердикт
@@ -237,7 +296,7 @@ function ruleCheck(docType, modelJson) {
   return out;
 }
 
-/* ---------- Основной обработчик ---------- */
+/* ---------- Основной обработчик (визион + pdf-ocr) ---------- */
 export default async function handler(req, res) {
   if (req.method !== "POST") {
     res.status(405).json({ error: "Method not allowed" });
@@ -252,6 +311,7 @@ export default async function handler(req, res) {
   const client = new OpenAI({ apiKey });
 
   try {
+    // multipart/form-data
     const form = formidable({
       multiples: false,
       maxFileSize: 10 * 1024 * 1024,
