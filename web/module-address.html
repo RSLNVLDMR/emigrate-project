@@ -58,10 +58,18 @@
           </select>
         </div>
 
+        <!-- Кастомная кнопка выбора файла + скрытый input -->
         <div class="row" style="gap:8px;align-items:flex-start;flex-wrap:wrap">
-          <input id="file" type="file" accept="image/*,application/pdf" class="input" style="max-width:320px" />
+          <input id="file" type="file" accept="image/*,application/pdf" class="hidden" />
+          <button id="pickFileBtn" class="btn secondary">Выбрать файл</button>
           <button id="checkBtn" class="btn">Проверить</button>
           <button id="rushBtn" class="btn secondary" disabled>Ускорить (5 мин)</button>
+        </div>
+
+        <!-- Статус прогресса -->
+        <div id="statusRow" class="row" style="gap:8px;align-items:center;display:none">
+          <span id="statusDot" style="width:10px;height:10px;border-radius:50%;background:var(--muted);display:inline-block"></span>
+          <span id="statusText" class="muted"></span>
         </div>
 
         <!-- Превью файла -->
@@ -166,12 +174,29 @@
     });
   }
 
+  // ===== статусная строка =====
+  const statusRow = $("#statusRow");
+  const statusDot = $("#statusDot");
+  const statusText = $("#statusText");
+  function setStatus(type, text){
+    const color = type==="ok" ? "var(--ok)"
+                : type==="warn" ? "var(--warn)"
+                : type==="error" ? "var(--danger)"
+                : type==="checking" ? "var(--warn)"
+                : "var(--muted)";
+    statusDot.style.background = color;
+    statusText.textContent = text || "";
+    statusRow.style.display = text ? "flex" : "none";
+  }
+
   // ===== upload state =====
   let chosenFile = null;
   const fileInput = $("#file");
   const fileInfo = $("#fileInfo");
   const fileName = $("#fileName");
   const fileMeta = $("#fileMeta");
+
+  $("#pickFileBtn").onclick = ()=> fileInput.click();
 
   fileInput.onchange = () => {
     const f = fileInput.files && fileInput.files[0];
@@ -180,9 +205,11 @@
       fileInfo.style.display = "block";
       fileName.textContent = chosenFile.name || "Файл";
       fileMeta.textContent = `${chosenFile.type || "—"} · ${fmtBytes(chosenFile.size||0)}`;
+      setStatus("warn","Файл выбран — можно запустить проверку.");
     } else {
       fileInfo.style.display = "none";
       fileName.textContent = ""; fileMeta.textContent = "";
+      setStatus(null,"");
       $("#resultCard").style.display = "none";
     }
   };
@@ -190,6 +217,7 @@
     chosenFile = null;
     fileInput.value = "";
     fileInfo.style.display = "none";
+    setStatus(null,"");
     $("#resultCard").style.display = "none";
   };
 
@@ -205,6 +233,7 @@
     fd.append("file", chosenFile);
 
     $("#checkBtn").disabled = true;
+    setStatus("checking","Проверяем…");
 
     try{
       const res = await fetch("/api/verify-address", { method:"POST", body: fd });
@@ -222,7 +251,12 @@
       $("#extracted").textContent = pretty;
 
       $("#resultCard").style.display = "block";
+
+      if (data.verdict === "pass") setStatus("ok","Проверка пройдена");
+      else if (data.verdict === "fail") setStatus("error","Есть ошибки");
+      else setStatus("warn","Не удалось уверенно определить корректность");
     }catch(e){
+      setStatus("error","Ошибка при проверке");
       alert("Не удалось проверить документ. Попробуйте ещё раз.");
     }finally{
       $("#checkBtn").disabled = false;
