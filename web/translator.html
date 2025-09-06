@@ -90,12 +90,13 @@
   // Telegram
   (function(){const tg=window.Telegram&&window.Telegram.WebApp; if(!tg)return; tg.expand(); tg.ready();})();
 
-  // Upload (без dnd)
+  // Upload (без dnd) — карточка создаётся/удаляется динамически
   const MAX_MB=10; let selectedFile=null; let previewUrl=null; let fileCardEl=null;
   const humanSize=b=>{const mb=b/1024/1024; return mb>=1?mb.toFixed(2)+' MB':(b/1024).toFixed(0)+' KB';};
   function removeFileCard(){ if(fileCardEl){fileCardEl.remove();fileCardEl=null;} if(previewUrl){URL.revokeObjectURL(previewUrl);previewUrl=null;} }
   function clearFile(){ selectedFile=null; $('#file').value=''; removeFileCard(); }
-  function createFileCard(file){ removeFileCard(); const card=document.createElement('div'); card.className='filecard';
+  function createFileCard(file){ removeFileCard();
+    const card=document.createElement('div'); card.className='filecard';
     const thumb=document.createElement('div'); thumb.className='filethumb';
     const col=document.createElement('div'); col.className='col'; col.style.flex='1';
     const nameEl=document.createElement('div'); nameEl.className='p'; nameEl.textContent=file.name;
