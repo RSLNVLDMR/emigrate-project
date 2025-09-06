@@ -1,0 +1,12 @@
+{
+  "name": "emigrant-miniapp",
+  "version": "0.0.2",
+  "private": true,
+  "type": "module",
+  "engines": { "node": ">=18" },
+  "dependencies": {
+    "formidable": "^3.5.1",
+    "openai": "^4.57.0",
+    "pdf-parse": "^1.1.1"
+  }
+}
