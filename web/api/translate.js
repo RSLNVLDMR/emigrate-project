@@ -2,9 +2,11 @@
 import OpenAI from "openai";
 import formidable from "formidable";
 import { promises as fsp } from "node:fs";
-import pdfParse from "pdf-parse";
 
-// (полезно для Next API Routes, в Node Functions игнорируется, но не мешает)
+// В некоторых окружениях top-level import "pdf-parse" вызывает чтение test-файла и крашит функцию.
+// Поэтому импортируем его динамически ТОЛЬКО при обработке PDF и оборачиваем в try/catch.
+
+// Полезно для Next API routes; в Node Functions не обязательно, но не мешает:
 export const config = { api: { bodyParser: false } };
 
 const client = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
@@ -16,16 +18,16 @@ export default async function handler(req, res) {
   }
 
   try {
-    // 1) парсим multipart/form-data
+    // 1) Разбираем multipart/form-data
     const form = formidable({
       multiples: false,
-      maxFileSize: 10 * 1024 * 1024, // 10MB
+      maxFileSize: 10 * 1024 * 1024, // 10 MB
       uploadDir: "/tmp",
       keepExtensions: true
     });
 
     const { fields, files } = await new Promise((resolve, reject) => {
-      form.parse(req, (err, fields, files) => (err ? reject(err) : resolve({ fields, files })));
+      form.parse(req, (err, flds, fls) => (err ? reject(err) : resolve({ fields: flds, files: fls })));
     });
 
     const from = (Array.isArray(fields.from) ? fields.from[0] : fields.from) || "auto";
@@ -34,7 +36,7 @@ export default async function handler(req, res) {
 
     const out = [];
 
-    // 2) если пришёл файл — обработаем
+    // 2) Если пришёл файл — обработаем
     const fileRec = files.file ? (Array.isArray(files.file) ? files.file[0] : files.file) : null;
 
     if (fileRec) {
@@ -44,7 +46,7 @@ export default async function handler(req, res) {
       });
 
       if (mime.startsWith("image/")) {
-        // OCR+перевод через мультимодальные Chat Completions
+        // OCR + перевод (Vision)
         const dataUrl = `data:${mime};base64,${buf.toString("base64")}`;
 
         const r = await client.chat.completions.create({
@@ -66,21 +68,44 @@ export default async function handler(req, res) {
 
         out.push(r.choices?.[0]?.message?.content?.trim() || "");
       } else if (mime === "application/pdf") {
-        // из PDF вытаскиваем текст и переводим
-        const parsed = await pdfParse(buf);
-        const pdfText = (parsed.text || "").trim();
-
-        if (pdfText) {
-          const r = await client.chat.completions.create({
-            model: "gpt-4o-mini",
-            messages: [
-              { role: "system", content: `Translate the text from ${from} to ${to}. Keep layout where reasonable. Return only the translated text.` },
-              { role: "user",   content: pdfText.slice(0, 200000) } // небольшой лимит на всякий
-            ]
+        // PDF: пробуем подключить парсер ТОЛЬКО здесь
+        let pdfParse;
+        try {
+          const mod = await import("pdf-parse");
+          pdfParse = mod.default || mod; // совместимость ESM/CJS
+        } catch (e) {
+          console.error("pdf-parse import failed:", e);
+          res.status(501).json({
+            error:
+              "Парсер PDF временно недоступен на сервере. Пожалуйста, загрузите фото/скрин страницы вместо PDF."
           });
-          out.push(r.choices?.[0]?.message?.content?.trim() || "");
-        } else {
-          out.push("[PDF: не удалось извлечь текст (похоже на скан без текстового слоя). Загрузите фото/скрин.]");
+          return;
+        }
+
+        try {
+          const parsed = await pdfParse(buf);
+          const pdfText = (parsed.text || "").trim();
+
+          if (pdfText) {
+            const r = await client.chat.completions.create({
+              model: "gpt-4o-mini",
+              messages: [
+                { role: "system", content: `Translate the text from ${from} to ${to}. Keep layout where reasonable. Return only the translated text.` },
+                { role: "user",   content: pdfText.slice(0, 200000) }
+              ]
+            });
+            out.push(r.choices?.[0]?.message?.content?.trim() || "");
+          } else {
+            out.push("[PDF: не удалось извлечь текст (похоже на скан без текстового слоя). Загрузите фото/скрин страницы.]");
+          }
+        } catch (e) {
+          // типичная проблема: ENOENT на test-файл внутри пакета у некоторых сборок
+          console.error("pdf-parse error:", e);
+          res.status(400).json({
+            error:
+              "Не удалось извлечь текст из PDF. Попробуйте загрузить фото/скрин страницы."
+          });
+          return;
         }
       } else {
         res.status(400).json({ error: "Unsupported file type" });
@@ -88,7 +113,7 @@ export default async function handler(req, res) {
       }
     }
 
-    // 3) если пришёл «сырой» текст — тоже переведём
+    // 3) Перевод plain-текста (если был)
     if (text && text.trim()) {
       const r = await client.chat.completions.create({
         model: "gpt-4o-mini",
