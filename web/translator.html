@@ -11,18 +11,7 @@
     .footer{position:sticky;bottom:0;z-index:4}
     button,.btn,select,input,textarea{pointer-events:auto;touch-action:manipulation;-webkit-tap-highlight-color:transparent}
 
-    /* UI загрузки файла */
-    .dz {
-      border: 2px dashed var(--line);
-      border-radius: 14px;
-      padding: 18px;
-      text-align: center;
-      color: var(--muted);
-      background: transparent;
-      transition: border-color .15s ease, background .15s ease;
-    }
-    .dz.hover { border-color: var(--brand); background: rgba(177,255,140,.06); }
-    .dz input[type=file]{ display:none; }
+    /* карточка выбранного файла */
     .filecard{
       display:flex; align-items:center; gap:12px;
       border:1px solid var(--line); border-radius:12px; padding:10px 12px; margin-top:10px;
@@ -33,9 +22,9 @@
       background: var(--card); display:flex; align-items:center; justify-content:center; overflow:hidden;
       font-weight:700; color: var(--muted);
     }
-    #out{ display:none; }
-    #out.show{ display:block; }
-    .xbtn{ background:transparent; border:1px solid var(--line); border-radius:8px; padding:4px 8px; cursor:pointer; color:var(--muted); }
+    #out{display:none}
+    #out.show{display:block}
+    .xbtn{background:transparent;border:1px solid var(--line);border-radius:8px;padding:4px 8px;cursor:pointer;color:var(--muted)}
   </style>
 </head>
 <body>
@@ -81,13 +70,13 @@
     <div class="col" style="margin-top:10px">
       <small class="muted" data-i18n="translator_or">или загрузите документ (фото/PDF):</small>
 
-      <!-- Dropzone -->
-      <label id="dz" class="dz">
-        <input id="file" type="file" accept="application/pdf,image/*"/>
-        <div id="dz_text" data-i18n="translator_drop">Перетащите файл сюда или нажмите, чтобы выбрать</div>
-      </label>
+      <!-- мобильный аплоад (без drag-n-drop) -->
+      <div class="row" style="gap:8px">
+        <input id="file" type="file" accept="application/pdf,image/*" hidden />
+        <button id="pick" type="button" class="btn secondary" data-i18n="translator_select">Выбрать файл</button>
+      </div>
 
-      <!-- Карточка выбранного файла -->
+      <!-- карточка файла (показывается только когда файл выбран) -->
       <div id="filecard" class="filecard hidden">
         <div id="thumb" class="filethumb">PDF</div>
         <div class="col" style="flex:1">
@@ -100,9 +89,9 @@
 
     <div class="footer">
       <button id="go" class="btn full" data-i18n="translator_do">Перевести</button>
+      <small id="hint" class="muted" style="display:none"></small>
     </div>
 
-    <!-- Результат (показываем только когда есть контент) -->
     <div id="out" class="card" style="margin-top:12px;white-space:pre-wrap">
       <div class="h2" data-i18n="translator_result">Результат</div>
       <div id="out_text"></div>
@@ -123,121 +112,101 @@
   const storage = { get(k,d=null){try{return JSON.parse(localStorage.getItem(k))??d}catch{return d}}, set(k,v){localStorage.setItem(k,JSON.stringify(v))} };
 
   // i18n
-  const i18n = {
-    lang: storage.get('lang','ru'),
-    dict:{},
-    async load(lang){
+  const i18n = { lang: storage.get('lang','ru'), dict:{}, async load(lang){
       const use = lang || i18n.lang;
-      try{
-        const res = await fetch(`./i18n/${use}.json`, {cache:'no-store'});
-        if(res.ok){ i18n.dict = await res.json(); i18n.lang = use; storage.set('lang',use); }
-      }catch(e){}
+      try{ const res = await fetch(`./i18n/${use}.json`, {cache:'no-store'});
+        if(res.ok){ i18n.dict = await res.json(); i18n.lang = use; storage.set('lang',use); } } catch(e){}
       apply(); highlightLang();
-    }
-  };
-  const t = (k)=> i18n.dict[k] || k;
-  function apply(){
-    $$('[data-i18n]').forEach(el=>{
-      const k = el.getAttribute('data-i18n');
-      if(i18n.dict[k]) {
-        if(el.tagName==='TEXTAREA') el.setAttribute('placeholder', i18n.dict[k]);
-        else el.textContent = i18n.dict[k];
-      }
-    });
-    document.documentElement.setAttribute('lang', i18n.lang);
-  }
+    } };
+  const t = k => i18n.dict[k] || k;
+  function apply(){ $$('[data-i18n]').forEach(el=>{
+      const k=el.getAttribute('data-i18n');
+      if(i18n.dict[k]){ if(el.tagName==='TEXTAREA') el.setAttribute('placeholder', i18n.dict[k]); else el.textContent=i18n.dict[k]; } });
+    document.documentElement.setAttribute('lang', i18n.lang); }
   function highlightLang(){ $$('.lang button').forEach(b=> b.classList.toggle('active', b.dataset.lang===i18n.lang)); }
   function bindLang(){ $$('.lang button').forEach(b=> b.onclick = ()=> i18n.load(b.dataset.lang)); }
 
   // Telegram
   (function(){ const tg=window.Telegram&&window.Telegram.WebApp; if(!tg) return; tg.expand(); tg.ready(); })();
 
-  // ---- Upload / Dropzone ----
-  const MAX_MB = 10;
-  let selectedFile = null;
+  // ====== Upload (без drag-n-drop) ======
+  const MAX_MB=10;
+  let selectedFile=null;
+  let previewUrl=null;
 
-  function humanSize(bytes){
-    const mb = bytes/1024/1024; return (mb>=1? mb.toFixed(2)+' MB' : (bytes/1024).toFixed(0)+' KB');
+  const humanSize = bytes => { const mb=bytes/1024/1024; return mb>=1?mb.toFixed(2)+' MB':(bytes/1024).toFixed(0)+' KB'; };
+
+  function ensureNoFileUI(){
+    selectedFile=null;
+    if(previewUrl){ URL.revokeObjectURL(previewUrl); previewUrl=null; }
+    const input=$('#file'); if(input) input.value='';
+    $('#filecard')?.classList.add('hidden');
+    $('#thumb').textContent='PDF';
   }
+
   function showFileCard(file){
-    const card = $('#filecard');
-    const thumb = $('#thumb');
-    const fname = $('#fname');
-    const fmeta = $('#fmeta');
-    fname.textContent = file.name;
-    fmeta.textContent = `${file.type||'binary'} · ${humanSize(file.size)}`;
+    $('#fname').textContent=file.name;
+    $('#fmeta').textContent=`${file.type||'binary'} · ${humanSize(file.size)}`;
     if(file.type.startsWith('image/')){
-      const url = URL.createObjectURL(file);
-      thumb.innerHTML = `<img src="${url}" alt="preview" style="width:100%;height:100%;object-fit:cover;border-radius:6px">`;
+      previewUrl = URL.createObjectURL(file);
+      $('#thumb').innerHTML = `<img src="${previewUrl}" alt="preview" style="width:100%;height:100%;object-fit:cover;border-radius:6px">`;
     } else {
-      thumb.textContent = 'PDF';
+      $('#thumb').textContent='PDF';
     }
-    card.classList.remove('hidden');
+    $('#filecard').classList.remove('hidden');
   }
-  function clearFile(){
-    selectedFile = null;
-    $('#file').value = '';
-    $('#filecard').classList.add('hidden');
-    $('#thumb').textContent = 'PDF';
-  }
+
   function acceptFile(file){
     if(!file) return;
-    const okType = file.type.startsWith('image/') || file.type === 'application/pdf';
+    const okType=file.type.startsWith('image/') || file.type==='application/pdf';
     if(!okType){ alert(t('translator_err_type')); return; }
-    if(file.size > MAX_MB*1024*1024){ alert(t('translator_err_size').replace('{mb}', MAX_MB)); return; }
-    selectedFile = file; showFileCard(file);
+    if(file.size>MAX_MB*1024*1024){ alert((t('translator_err_size')||'Файл больше {mb} МБ').replace('{mb}',MAX_MB)); return; }
+    selectedFile=file; showFileCard(file);
   }
 
-  function bindDropzone(){
-    const dz = $('#dz');
-    const input = $('#file');
-    dz.addEventListener('click', ()=> input.click());
-    input.addEventListener('change', e=> acceptFile(e.target.files[0]));
-
-    ;['dragenter','dragover'].forEach(ev=> dz.addEventListener(ev, e=>{ e.preventDefault(); dz.classList.add('hover'); }));
-    ;['dragleave','drop'].forEach(ev=> dz.addEventListener(ev, e=>{ e.preventDefault(); dz.classList.remove('hover'); }));
-    dz.addEventListener('drop', e=>{
-      const f = e.dataTransfer.files && e.dataTransfer.files[0];
-      acceptFile(f);
-    });
-
-    $('#remove').onclick = clearFile;
+  function bindUploader(){
+    $('#pick').onclick = ()=> $('#file').click();
+    $('#file').addEventListener('change', e=> acceptFile(e.target.files?.[0]));
+    $('#remove').onclick = ensureNoFileUI;
+    // стартовое состояние — без карточки
+    ensureNoFileUI();
   }
 
-  // ---- Demo translate ----
-  async function translateText({text, from, to}){ return `DEMO (${from}→${to}): ${text}`; }
-  async function translateFile({file, from, to}){
-    // Здесь позже подключим OCR/мультимодальный перевод.
-    return `DEMO (${from}→${to}): принят файл «${file.name}» (${file.type||'binary'}, ${humanSize(file.size)}). Текст будет извлечён и переведён после подключения OCR.`;
+  // ====== API ======
+  async function callAPI({text,from,to,file}){
+    const fd=new FormData();
+    fd.append('from',from); fd.append('to',to);
+    if(text) fd.append('text',text);
+    if(file) fd.append('file',file,file.name);
+    const res=await fetch('/api/translate',{method:'POST', body:fd});
+    const data=await res.json().catch(()=>({}));
+    if(!res.ok) throw new Error(data.error||'Server error');
+    return data.text;
   }
+  function setHint(msg){ const h=$('#hint'); if(msg){ h.textContent=msg; h.style.display='block'; } else h.style.display='none'; }
 
   function bindActions(){
     $('#go').onclick = async ()=>{
-      const text = $('#src').value.trim();
+      const text=$('#src').value.trim();
       if(!text && !selectedFile){ alert(t('translator_err_empty')); return; }
-
-      $('#out').classList.add('show');
-      const from = $('#from').value, to = $('#to').value;
-      let parts = [];
-      if(text){
-        const t1 = await translateText({text, from, to});
-        parts.push(t1);
-      }
-      if(selectedFile){
-        const t2 = await translateFile({file:selectedFile, from, to});
-        parts.push(t2);
-      }
-      $('#out_text').textContent = parts.join('\n\n');
+      setHint(t('translator_processing') || 'Обрабатываем…');
+      $('#out').classList.remove('show'); $('#out_text').textContent='';
+      try{
+        const out=await callAPI({text,from:$('#from').value,to:$('#to').value,file:selectedFile});
+        $('#out_text').textContent=out||'—';
+        $('#out').classList.add('show');
+      }catch(e){
+        alert((t('translator_err_server')||'Ошибка сервера')+': '+(e.message||'')); 
+      }finally{ setHint(''); }
     };
   }
 
   async function boot(){
     bindLang();
     await i18n.load(storage.get('lang','ru'));
-    bindDropzone();
+    bindUploader();
     bindActions();
   }
-
   document.addEventListener('DOMContentLoaded', boot);
   window.addEventListener('pageshow', boot);
 })();
