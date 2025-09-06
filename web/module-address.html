@@ -6,21 +6,6 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <script src="https://telegram.org/js/telegram-web-app.js"></script>
   <link rel="stylesheet" href="./styles.css" />
-  <style>
-    .filecard{display:flex;align-items:center;gap:12px;border:1px solid var(--line);border-radius:12px;padding:10px 12px;background:transparent;max-width:100%}
-    .filethumb{width:48px;height:48px;border-radius:8px;border:1px solid var(--line);background:var(--card);display:flex;align-items:center;justify-content:center;overflow:hidden;font-weight:700;color:var(--muted)}
-    .xbtn{background:transparent;border:1px solid var(--line);border-radius:8px;padding:4px 8px;cursor:pointer;color:var(--muted)}
-    details{border:1px solid var(--line);border-radius:12px;padding:12px;background:transparent}
-    details>summary{cursor:pointer;font-weight:700;list-style:none}
-    details>summary::-webkit-details-marker{display:none}
-    .status{display:inline-flex;gap:8px;align-items:center}
-    .dot{width:8px;height:8px;border-radius:999px;background:var(--warn)}
-    .dot.ok{background:var(--ok)}
-    .dot.err{background:var(--danger)}
-    #resultBox{display:none}
-    #resultBox.show{display:block}
-    #errors li{margin:6px 0}
-  </style>
 </head>
 <body>
 <div class="screen">
@@ -34,75 +19,82 @@
       </div>
     </div>
 
+    <!-- Общее описание -->
     <div class="card">
-      <div class="h2">Зачем нужен документ</div>
-      <p class="p">Подтверждение адреса требуется для карты побыту, банковского счёта, в ZUS/Urząd Skarbowy и др. Подойдут: мелдунек (zaświadczenie o zameldowaniu), договор аренды, акт приема-передачи/проживания, документы собственника с заявлением и т.п.</p>
+      <div class="h2">Зачем это нужно</div>
+      <div class="p muted">
+        Этот модуль помогает подготовить и проверить документ, подтверждающий адрес проживания
+        в Польше (договор аренды, мелдунек, подтверждение собственника и т.п.).
+      </div>
     </div>
 
-    <details open style="margin-top:12px">
-      <summary>Как оформить</summary>
-      <div class="col" style="margin-top:8px">
-        <div class="item"><div class="badge">Скоро</div><div>Умова найму (обычная) — сюда добавим пошаговую инструкцию.</div></div>
-        <div class="item"><div class="badge">Скоро</div><div>Умова найму okazjonalna — отдельные нюансы: нотариальное заявление, адрес «na wypadek» и пр.</div></div>
-        <div class="item"><div class="badge">Скоро</div><div>Мелдунек — где и как получить в gmina/UM, какие данные должны стоять на справке.</div></div>
-        <div class="item"><div class="badge">Скоро</div><div>Вы — собственник жилья (księga wieczysta/акт) — как подготовить подтверждение для ужонда/банка.</div></div>
-        <small class="muted">Мы подставим точные тексты и нюансы для каждого сценария после анкеты. Пока — плейсхолдер.</small>
-      </div>
-    </details>
+    <!-- Как оформить (плейсхолдеры сценариев) -->
+    <div class="card" style="margin-top:12px">
+      <div class="h2">Как оформить</div>
+      <div class="p muted">Дальше здесь будут разные сценарии оформления в зависимости от вашей ситуации:</div>
+      <ul class="p muted" style="margin-top:4px">
+        <li>У вас <b>обычный договор аренды</b></li>
+        <li>У вас <b>умова найму оказионального</b></li>
+        <li>Нужно получить <b>мелдунек</b></li>
+        <li>Вы — <b>владелец жилья</b></li>
+        <li>Сейчас <b>нет легального жилья</b> — временные варианты</li>
+      </ul>
+      <div class="p muted">Сценарий подберём по ответам анкеты; пока здесь — заглушка.</div>
+    </div>
 
+    <!-- Загрузка и проверка -->
     <div class="card" style="margin-top:12px">
       <div class="h2">У меня уже есть документ</div>
 
-      <label class="col" style="margin-bottom:8px">
-        <span>Тип документа</span>
-        <select id="docType" class="input">
-          <option value="lease_standard">Договор аренды (обычный)</option>
-          <option value="lease_okazjonalna">Договор аренды okazjonalna</option>
-          <option value="meldunek">Мелдунек (zaświadczenie o zameldowaniu)</option>
-          <option value="owner">Вы — собственник жилья</option>
-          <option value="other">Другое подтверждение адреса</option>
-        </select>
-      </label>
-
-      <div class="col" id="uploadZone">
-        <small class="muted">Загрузите фото или PDF (до 10 МБ):</small>
-        <div class="row" style="gap:8px">
-          <input id="file" type="file" accept="application/pdf,image/*" hidden />
-          <button id="pick" type="button" class="btn secondary">Выбрать файл</button>
+      <div class="col" style="gap:10px">
+        <div class="row" style="gap:8px;flex-wrap:wrap">
+          <label class="muted">Тип документа:</label>
+          <select id="docType" class="input" style="max-width:320px">
+            <option value="lease_standard">Договор аренды (обычный)</option>
+            <option value="lease_okazjonalna">Договор аренды (okazjonalna)</option>
+            <option value="meldunek">Мелдунек (zaświadczenie o zameldowaniu)</option>
+            <option value="owner">Вы — собственник</option>
+            <option value="other">Другое</option>
+          </select>
         </div>
-        <div id="preview"></div>
+
+        <div class="row" style="gap:8px;align-items:flex-start;flex-wrap:wrap">
+          <input id="file" type="file" accept="image/*,application/pdf" class="input" style="max-width:320px" />
+          <button id="checkBtn" class="btn">Проверить</button>
+          <button id="rushBtn" class="btn secondary" disabled>Ускорить (5 мин)</button>
+        </div>
+
+        <!-- Превью файла -->
+        <div id="fileInfo" class="card" style="display:none;background:transparent;border-style:dashed">
+          <div class="row" style="justify-content:space-between;align-items:center">
+            <div class="col" style="gap:2px">
+              <div id="fileName" class="p"></div>
+              <small id="fileMeta" class="muted"></small>
+            </div>
+            <button id="removeFile" class="btn secondary">Удалить</button>
+          </div>
+        </div>
       </div>
-
-      <div class="row" style="justify-content:space-between;margin-top:12px">
-        <div class="status"><span class="dot" id="statusDot"></span><small id="statusText" class="muted">Проверка не запущена</small></div>
-        <div class="row" style="gap:8px">
-          <button id="run" class="btn">Проверить</button>
-          <button id="speed" class="btn secondary" title="Оплата будет позже" disabled>Ускорить (5 мин)</button>
-        </div>
-      </div>
-
-      <div id="resultBox" class="card" style="margin-top:12px">
-        <div class="h2" style="margin-top:0">Результат</div>
-        <p id="verdict" class="p"></p>
-        <div id="blockErrors" class="col hidden">
-          <div class="h2">Ошибки и замечания</div>
-          <ul id="errors"></ul>
-        </div>
-        <div id="blockRecos" class="col hidden">
-          <div class="h2">Что исправить</div>
-          <ul id="recos"></ul>
-        </div>
-        <details style="margin-top:8px">
-          <summary>Извлечённые поля</summary>
-          <pre id="fields" style="white-space:pre-wrap;overflow-wrap:anywhere;margin:8px 0 0"></pre>
-        </details>
-        <small class="muted">Сообщение также придёт в бота.</small>
-      </div>
-
-      <small class="muted" style="display:block;margin-top:8px">
-        По умолчанию проверка занимает до 24 часов. После оплаты — до 5 минут. (Оплата появится позже; для теста ответ приходит сразу.)
-      </small>
     </div>
+
+    <!-- Результат / Что исправить / Извлечённые поля -->
+    <div id="resultCard" class="card" style="margin-top:12px;display:none">
+      <div class="h2">Результат</div>
+      <div id="resultMsg" class="p"></div>
+
+      <hr />
+
+      <div class="h2">Что исправить</div>
+      <ul id="issues" class="p" style="margin-top:4px"></ul>
+
+      <hr />
+
+      <div class="h2">Извлечённые поля</div>
+      <div id="extracted" class="p" style="white-space:pre-wrap;font-family:ui-monospace, Menlo, Consolas, monospace;background:var(--ink);border:1px solid var(--line);border-radius:12px;padding:12px"></div>
+
+      <small class="muted" style="display:block;margin-top:8px">Сообщение также придёт в бота.</small>
+    </div>
+
   </div>
 
   <div class="tabs">
@@ -114,123 +106,132 @@
 
 <script>
 (function(){
-  const $=(s,r=document)=>r.querySelector(s);
-  const MAX_MB=10;
+  const $ = (s,r=document)=>r.querySelector(s);
 
-  const tg=window.Telegram?.WebApp; if(tg){tg.expand(); tg.ready();}
-
-  let selectedFile=null, previewUrl=null, cardEl=null;
-  let busy=false;
-
-  function humanSize(b){const mb=b/1024/1024; return mb>=1?mb.toFixed(2)+' MB':(b/1024).toFixed(0)+' KB';}
-  function setStatus(type,text){
-    $('#statusText').textContent=text||'';
-    const d=$('#statusDot'); d.className='dot';
-    if(type==='ok') d.classList.add('ok'); else if(type==='err') d.classList.add('err');
+  // ===== helper =====
+  function fmtBytes(n){
+    if(!n && n!==0) return "";
+    const u=["Б","КБ","МБ","ГБ"]; let i=0; let v=n;
+    while(v>1024 && i<u.length-1){ v/=1024; i++; }
+    return v.toFixed(v<10?1:0)+" "+u[i];
+  }
+  function humanFields(fields){
+    const map = {
+      full_name: "ФИО",
+      address: "Адрес",
+      postal_code: "Индекс",
+      city: "Город",
+      doc_date: "Дата документа",
+      valid_from: "Действует с",
+      valid_to: "Действует до",
+      issuer: "Орган, выдавший документ",
+      signatures_present: "Подписи/печати"
+    };
+    const order = ["full_name","address","postal_code","city","doc_date","valid_from","valid_to","issuer","signatures_present"];
+    const lines = [];
+    lines.push("{");
+    order.forEach((k)=>{
+      const label = map[k] || k;
+      let val = fields && (fields[k]!==undefined ? fields[k] : null);
+      if (val === null || val === undefined || val === "") val = "—";
+      if (typeof val === "boolean") val = val ? "да" : "нет";
+      lines.push(`  "${label}": ${typeof val==="string" ? `"${String(val)}"` : val}`);
+    });
+    lines.push("}");
+    return lines.join("\n");
+  }
+  function verdictMessage(v, isProof){
+    if(v==="fail") {
+      if(isProof === false) return "Документ не является подтверждением адреса.";
+      return "Документ содержит ошибки и не может быть принят.";
+    }
+    if(v==="pass") return "Документ подтверждает адрес проживания.";
+    return "Не удалось уверенно определить корректность документа.";
+  }
+  function renderIssues(list){
+    const box = $("#issues");
+    box.innerHTML = "";
+    if(!list || !list.length){
+      const li = document.createElement("li");
+      li.className = "muted";
+      li.textContent = "Ошибок не найдено.";
+      box.appendChild(li);
+      return;
+    }
+    list.forEach(e=>{
+      const li = document.createElement("li");
+      const sev = e.severity ? String(e.severity).toUpperCase() : "";
+      li.innerHTML = `<b>${e.title || "Ошибка"}</b> · ${sev}<br/><span class="muted">${e.detail || ""}</span>`;
+      box.appendChild(li);
+    });
   }
 
-  // удалить только карточку/превью (НЕ трогая selectedFile и input.value)
-  function removeCardOnly(){
-    if(cardEl){cardEl.remove();cardEl=null;}
-    if(previewUrl){URL.revokeObjectURL(previewUrl);previewUrl=null;}
-  }
+  // ===== upload state =====
+  let chosenFile = null;
+  const fileInput = $("#file");
+  const fileInfo = $("#fileInfo");
+  const fileName = $("#fileName");
+  const fileMeta = $("#fileMeta");
 
-  // полная очистка (по кнопке "Удалить")
-  function clearPreview(){
-    removeCardOnly();
-    selectedFile=null;
-    const inp=$('#file'); if(inp) inp.value='';
-  }
+  fileInput.onchange = () => {
+    const f = fileInput.files && fileInput.files[0];
+    chosenFile = f || null;
+    if (chosenFile){
+      fileInfo.style.display = "block";
+      fileName.textContent = chosenFile.name || "Файл";
+      fileMeta.textContent = `${chosenFile.type || "—"} · ${fmtBytes(chosenFile.size||0)}`;
+    } else {
+      fileInfo.style.display = "none";
+      fileName.textContent = ""; fileMeta.textContent = "";
+      $("#resultCard").style.display = "none";
+    }
+  };
+  $("#removeFile").onclick = () => {
+    chosenFile = null;
+    fileInput.value = "";
+    fileInfo.style.display = "none";
+    $("#resultCard").style.display = "none";
+  };
 
-  function makePreview(f){
-    removeCardOnly(); // убираем старую карточку, файл оставляем
-    const card=document.createElement('div'); card.className='filecard';
-    const thumb=document.createElement('div'); thumb.className='filethumb';
-    const col=document.createElement('div'); col.className='col'; col.style.flex='1';
-    const name=document.createElement('div'); name.className='p'; name.textContent=f.name;
-    const meta=document.createElement('small'); meta.className='muted'; meta.textContent=(f.type||'binary')+' · '+humanSize(f.size);
-    const del=document.createElement('button'); del.className='xbtn'; del.textContent='Удалить'; del.onclick=()=>{ clearPreview(); setStatus(null,'Файл удалён'); };
-    if(f.type.startsWith('image/')){ previewUrl=URL.createObjectURL(f); thumb.innerHTML=`<img src="${previewUrl}" alt="preview" style="width:100%;height:100%;object-fit:cover;border-radius:6px">`; } else { thumb.textContent='PDF'; }
-    col.appendChild(name); col.appendChild(meta); card.appendChild(thumb); card.appendChild(col); card.appendChild(del);
-    $('#preview').appendChild(card); cardEl=card;
-  }
+  // ===== check =====
+  $("#checkBtn").onclick = async ()=>{
+    if(!chosenFile){
+      alert("Сначала загрузите файл.");
+      return;
+    }
+    const docType = $("#docType").value || "other";
+    const fd = new FormData();
+    fd.append("docType", docType);
+    fd.append("file", chosenFile);
 
-  // универсальный геттер файла (из памяти или прямо из input)
-  function currentFile(){
-    if (selectedFile) return selectedFile;
-    const inp=$('#file');
-    if (inp && inp.files && inp.files[0]) return inp.files[0];
-    return null;
-  }
-
-  // bind upload
-  $('#pick').onclick=()=>$('#file').click();
-  $('#file').addEventListener('change',e=>{
-    const f=e.target.files?.[0]; if(!f) return;
-    const ok=f.type.startsWith('image/') || f.type==='application/pdf';
-    if(!ok){ alert('Поддерживаем только фото и PDF'); return; }
-    if(f.size>MAX_MB*1024*1024){ alert('Файл больше '+MAX_MB+' МБ'); return; }
-    selectedFile=f;                // ⬅️ СНАЧАЛА запоминаем файл
-    makePreview(f);                // ⬅️ а превью больше НЕ обнуляет selectedFile
-    setStatus(null,'Файл загружен — можно запускать проверку');
-  });
-
-  function renderResult(data){
-    const verdict=$('#verdict'); const errBlock=$('#blockErrors'); const recBlock=$('#blockRecos');
-    verdict.textContent = data.message || (data.verdict==='pass'?'Документ принят. Критичных ошибок не найдено.':
-                         data.verdict==='fail'?'Есть ошибки — см. ниже.':'Не удалось уверенно определить корректность документа.');
-    // ошибки
-    const errs=(data.errors||[]); const ulE=$('#errors'); ulE.innerHTML='';
-    if(errs.length){ errBlock.classList.remove('hidden'); errs.forEach(e=>{
-      const li=document.createElement('li'); li.innerHTML=`<b>${e.title||e.code||'Ошибка'}</b>${e.severity?' · '+e.severity.toUpperCase():''}<br><small class="muted">${e.detail||''}</small>`;
-      ulE.appendChild(li);
-    }); } else errBlock.classList.add('hidden');
-    // рекомендации
-    const recs=(data.recommendations||[]); const ulR=$('#recos'); ulR.innerHTML='';
-    if(recs.length){ recBlock.classList.remove('hidden'); recs.forEach(r=>{const li=document.createElement('li'); li.textContent=r; ulR.appendChild(li);});}
-    else recBlock.classList.add('hidden');
-
-    $('#fields').textContent = JSON.stringify(data.fieldsExtracted||{}, null, 2);
-    $('#resultBox').classList.add('show');
-  }
-
-  async function verify(){
-    if(busy) return;
-    const f = currentFile();
-    if(!f){ alert('Сначала загрузите файл'); return; }
-
-    const fromSel = $('#docType').value;
-    setStatus(null,'Проверяем…');
-    $('#resultBox').classList.remove('show');
-
-    busy=true;
-    $('#run').setAttribute('disabled','disabled');
+    $("#checkBtn").disabled = true;
 
     try{
-      const fd=new FormData();
-      fd.append('docType', fromSel);
-      fd.append('file', f, f.name);
+      const res = await fetch("/api/verify-address", { method:"POST", body: fd });
+      const data = await res.json();
 
-      const res=await fetch('/api/verify-address',{method:'POST',body:fd});
-      const data=await res.json().catch(()=>({}));
-      if(!res.ok) throw new Error(data.error||'Ошибка сервера');
+      // Результат — всегда есть
+      const msg = verdictMessage(data.verdict, data.is_proof_of_address);
+      $("#resultMsg").textContent = msg;
 
-      renderResult(data);
-      setStatus(data.verdict==='pass'?'ok':(data.verdict==='fail'?'err':null),
-                data.verdict==='pass'?'Проверка пройдена':(data.verdict==='fail'?'Есть ошибки':'Неопределённо'));
-      // TODO: пуш-уведомление в бота
+      // Ошибки — всегда показываем (или «Ошибок не найдено»)
+      renderIssues(data.errors || []);
+
+      // Извлечённые поля — человекочитаемые подписи
+      const pretty = humanFields(data.fieldsExtracted || {});
+      $("#extracted").textContent = pretty;
+
+      $("#resultCard").style.display = "block";
     }catch(e){
-      console.error(e);
-      setStatus('err','Не удалось проверить документ');
-      alert('Ошибка: '+(e.message||''));
+      alert("Не удалось проверить документ. Попробуйте ещё раз.");
     }finally{
-      busy=false;
-      $('#run').removeAttribute('disabled');
+      $("#checkBtn").disabled = false;
     }
-  }
+  };
 
-  $('#run').onclick=verify;
-  $('#speed').onclick=()=>alert('Оплата и ускорение появятся позже 🙂');
+  // TG init
+  const tg = window.Telegram && window.Telegram.WebApp;
+  if (tg) { tg.expand(); tg.ready(); }
 })();
 </script>
 </body>
