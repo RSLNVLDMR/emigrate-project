@@ -100,4 +100,18 @@
   "item.parallel_options": "Паралельныя опцыі (вучоба/праца)",
   "item.obligations": "Абавязкі і падаўжэнне",
   "item.employer_change": "Змена працадаўцы (калі трэба)"
+
+  "translator_title": "AI перакладчык",
+  "translator_from": "З мовы",
+  "translator_to": "На мову",
+  "translator_placeholder": "Устаўце тэкст для перакладу…",
+  "translator_do": "Перакласці",
+  "translator_err_empty": "Увядзіце тэкст або загрузіце дакумент",
+  "translator_or": "ці загрузіце дакумент (фота/PDF):",
+  "translator_drop": "Перацягніце файл сюды або націсніце, каб выбраць",
+  "translator_remove": "Выдаліць",
+  "translator_err_type": "Дапускаюцца толькі выявы і PDF",
+  "translator_err_size": "Файл большы за {mb} МБ",
+  "translator_result": "Вынік"
+
 }
