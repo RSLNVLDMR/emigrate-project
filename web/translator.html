@@ -7,7 +7,7 @@
   <script src="https://telegram.org/js/telegram-web-app.js"></script>
   <link rel="stylesheet" href="./styles.css" />
   <style>
-    .filecard{display:flex;align-items:center;gap:12px;border:1px solid var(--line);border-radius:12px;padding:10px 12px;margin-top:10px;background:transparent;max-width:100%}
+    .filecard{display:flex;align-items:center;gap:12px;border:1px solid var(--line);border-radius:12px;padding:10px 12px;background:transparent}
     .filethumb{width:48px;height:48px;border-radius:8px;border:1px solid var(--line);background:var(--card);display:flex;align-items:center;justify-content:center;overflow:hidden;font-weight:700;color:var(--muted)}
     .xbtn{background:transparent;border:1px solid var(--line);border-radius:8px;padding:4px 8px;cursor:pointer;color:var(--muted)}
   </style>
@@ -39,18 +39,25 @@
       </label>
     </div>
 
-    <label class="col" style="margin-top:10px">
-      <span data-i18n="translator_placeholder">Вставьте текст для перевода…</span>
-      <textarea id="src" class="input" placeholder="Вставьте текст для перевода…"></textarea>
-    </label>
+    <!-- Блок «текст ИЛИ превью файла» -->
+    <div id="ioSwitch" class="col" style="margin-top:10px">
+      <!-- текстовое поле (по умолчанию видно) -->
+      <label id="textBlock" class="col">
+        <span data-i18n="translator_placeholder">Вставьте текст для перевода…</span>
+        <textarea id="src" class="input" placeholder="Вставьте текст для перевода…"></textarea>
+      </label>
 
+      <!-- превью файла (по умолчанию скрыто) -->
+      <div id="previewTop" class="hidden"></div>
+    </div>
+
+    <!-- Зона выбора файла -->
     <div class="col" style="margin-top:10px">
       <small class="muted" data-i18n="translator_or">или загрузите документ (фото/PDF):</small>
       <div class="row" style="gap:8px">
         <input id="file" type="file" accept="application/pdf,image/*" hidden />
         <button id="pick" type="button" class="btn secondary" data-i18n="translator_select">Выбрать файл</button>
       </div>
-      <div id="filewrap"></div>
     </div>
 
     <div class="footer">
@@ -58,7 +65,7 @@
       <small id="hint" class="muted" style="display:none"></small>
     </div>
 
-    <!-- Сабтайтл и карточка результата — скрыты стилями из styles.css -->
+    <!-- Результат -->
     <div id="result_label" class="h2" data-i18n="translator_result">Результат</div>
     <div id="out" class="card"><div id="out_text"></div></div>
   </div>
@@ -85,35 +92,80 @@
   // Telegram
   (function(){const tg=window.Telegram&&window.Telegram.WebApp; if(!tg)return; tg.expand(); tg.ready();})();
 
-  // Upload (без dnd)
-  const MAX_MB=10; let selectedFile=null; let previewUrl=null; let fileCardEl=null;
+  // ================== File preview in place of textarea ==================
+  const MAX_MB=10;
+  let selectedFile=null, previewUrl=null, fileCardEl=null;
+
+  const textBlock   = $('#textBlock');
+  const previewTop  = $('#previewTop');
+
   const humanSize=b=>{const mb=b/1024/1024; return mb>=1?mb.toFixed(2)+' MB':(b/1024).toFixed(0)+' KB';};
-  function removeFileCard(){ if(fileCardEl){fileCardEl.remove();fileCardEl=null;} if(previewUrl){URL.revokeObjectURL(previewUrl);previewUrl=null;} }
-  function clearFile(){ selectedFile=null; $('#file').value=''; removeFileCard(); }
-  function createFileCard(file){ removeFileCard();
+
+  function removeFileCard(){
+    if(fileCardEl){ fileCardEl.remove(); fileCardEl=null; }
+    if(previewUrl){ URL.revokeObjectURL(previewUrl); previewUrl=null; }
+    // вернуть текстовое поле
+    textBlock.classList.remove('hidden');
+    previewTop.classList.add('hidden');
+    previewTop.innerHTML='';
+    selectedFile=null;
+    $('#file').value='';
+  }
+
+  function createFileCard(file){
+    // спрятать textarea и показать превью сверху
+    textBlock.classList.add('hidden');
+    previewTop.classList.remove('hidden');
+    previewTop.innerHTML='';
+
     const card=document.createElement('div'); card.className='filecard';
     const thumb=document.createElement('div'); thumb.className='filethumb';
     const col=document.createElement('div'); col.className='col'; col.style.flex='1';
     const nameEl=document.createElement('div'); nameEl.className='p'; nameEl.textContent=file.name;
     const meta=document.createElement('small'); meta.className='muted'; meta.textContent=`${file.type||'binary'} · ${humanSize(file.size)}`;
-    const btn=document.createElement('button'); btn.className='xbtn'; btn.textContent=t('translator_remove')||'Удалить'; btn.onclick=clearFile;
-    if(file.type.startsWith('image/')){ previewUrl=URL.createObjectURL(file); thumb.innerHTML=`<img src="${previewUrl}" alt="preview" style="width:100%;height:100%;object-fit:cover;border-radius:6px">`; } else { thumb.textContent='PDF'; }
-    col.appendChild(nameEl); col.appendChild(meta); card.appendChild(thumb); card.appendChild(col); card.appendChild(btn);
-    $('#filewrap').appendChild(card); fileCardEl=card; }
-  function acceptFile(file){ if(!file)return; const ok=file.type.startsWith('image/')||file.type==='application/pdf';
-    if(!ok){alert(t('translator_err_type')||'Неподдерживаемый тип файла');return;}
-    if(file.size>MAX_MB*1024*1024){alert((t('translator_err_size')||'Файл больше {mb} МБ').replace('{mb}',MAX_MB));return;}
-    selectedFile=file; createFileCard(file); }
-  function bindUploader(){ $('#pick').onclick=()=>$('#file').click(); $('#file').addEventListener('change',e=>acceptFile(e.target.files?.[0])); clearFile(); }
+    const btn=document.createElement('button'); btn.className='xbtn'; btn.textContent=t('translator_remove')||'Удалить'; btn.onclick=removeFileCard;
 
-  // API
-  async function callAPI({text,from,to,file}){ const fd=new FormData(); fd.append('from',from); fd.append('to',to); if(text) fd.append('text',text); if(file) fd.append('file',file,file.name);
-    const res=await fetch('/api/translate',{method:'POST',body:fd}); const data=await res.json().catch(()=>({})); if(!res.ok) throw new Error(data.error||'Server error'); return data.text; }
+    if(file.type.startsWith('image/')){ previewUrl=URL.createObjectURL(file);
+      thumb.innerHTML=`<img src="${previewUrl}" alt="preview" style="width:100%;height:100%;object-fit:cover;border-radius:6px">`;
+    } else { thumb.textContent='PDF'; }
+
+    col.appendChild(nameEl); col.appendChild(meta);
+    card.appendChild(thumb); card.appendChild(col); card.appendChild(btn);
+    previewTop.appendChild(card); fileCardEl=card;
+  }
+
+  function acceptFile(file){
+    if(!file) return;
+    const ok=file.type.startsWith('image/') || file.type==='application/pdf';
+    if(!ok){ alert(t('translator_err_type')||'Неподдерживаемый тип файла'); return; }
+    if(file.size>MAX_MB*1024*1024){ alert((t('translator_err_size')||'Файл больше {mb} МБ').replace('{mb}',MAX_MB)); return; }
+    selectedFile=file;
+    createFileCard(file);
+  }
+
+  function bindUploader(){
+    $('#pick').onclick=()=>$('#file').click();
+    $('#file').addEventListener('change',e=>acceptFile(e.target.files?.[0]));
+    removeFileCard(); // при загрузке страницы — текстовый режим
+  }
+
+  // ================== API ==================
+  async function callAPI({text,from,to,file}){
+    const fd=new FormData();
+    fd.append('from',from); fd.append('to',to);
+    if(text) fd.append('text',text);
+    if(file) fd.append('file',file,file.name);
+    const res=await fetch('/api/translate',{method:'POST',body:fd});
+    const data=await res.json().catch(()=>({}));
+    if(!res.ok) throw new Error(data.error||'Server error');
+    return data.text;
+  }
   function setHint(msg){ const h=$('#hint'); if(msg){h.textContent=msg; h.style.display='block';} else h.style.display='none'; }
 
+  // Результат
   function showResult(text){
     $('#result_label').style.display='block';
-    $('#out_text').textContent = (text||'—').replace(/^\s+/, '');
+    $('#out_text').textContent=(text||'—').replace(/^\s+/, '');
     $('#out').classList.add('show');
   }
   function hideResult(){
@@ -122,13 +174,31 @@
     $('#out').classList.remove('show');
   }
 
-  function bindActions(){ $('#go').onclick=async()=>{ const text=$('#src').value.trim(); if(!text && !selectedFile){alert(t('translator_err_empty')||'Нечего переводить');return;}
+  function bindActions(){
+    $('#go').onclick=async()=>{
+      const from=$('#from').value, to=$('#to').value;
+      // если есть файл — игнорируем текст
+      const text = selectedFile ? '' : $('#src').value.trim();
+      if(!text && !selectedFile){ alert(t('translator_err_empty')||'Нечего переводить'); return; }
       setHint(t('translator_processing')||'Обрабатываем…'); hideResult();
-      try{ const out=await callAPI({text,from:$('#from').value,to:$('#to').value,file:selectedFile}); showResult(out||'—'); }
-      catch(e){ alert((t('translator_err_server')||'Ошибка сервера')+': '+(e.message||'')); }
-      finally{ setHint(''); } }; }
+      try{
+        const out=await callAPI({text,from,to,file:selectedFile});
+        showResult(out||'—');
+      }catch(e){
+        alert((t('translator_err_server')||'Ошибка сервера')+': '+(e.message||'')); 
+      }finally{ setHint(''); }
+    };
+  }
 
-  async function boot(){ bindLang(); await i18n.load(storage.get('lang','ru')); bindUploader(); bindActions(); hideResult(); }
+  // i18n/lang
+  function initLang(){
+    $$('.lang button').forEach(b=> b.onclick=()=>i18n.load(b.dataset.lang));
+  }
+
+  async function boot(){
+    initLang(); await i18n.load(storage.get('lang','ru'));
+    bindUploader(); bindActions(); hideResult();
+  }
   document.addEventListener('DOMContentLoaded', boot);
   window.addEventListener('pageshow', boot);
 })();
