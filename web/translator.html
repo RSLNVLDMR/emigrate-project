@@ -15,6 +15,26 @@
     #out{display:none}
     #out.show{display:block}
     #result_label{display:none;margin-top:16px}
+
+    /* === Точные правки для блока результата === */
+    #out{
+      /* Перекрываем возможные глобальные min-height/height у .card */
+      min-height: 0 !important;
+      height: auto !important;
+      max-height: none !important;
+
+      /* Компактные внутренние отступы, чтобы текст начинался сразу сверху */
+      padding: 12px 14px !important;
+
+      /* Адаптивный контейнер под контент */
+      margin-top: 8px;
+      white-space: pre-wrap;
+    }
+    #out_text{
+      margin: 0;                 /* убираем возможные внешние отступы */
+      line-height: 1.45;         /* читаемость без лишней «воздушки» сверху */
+    }
+
     .xbtn{background:transparent;border:1px solid var(--line);border-radius:8px;padding:4px 8px;cursor:pointer;color:var(--muted)}
   </style>
 </head>
@@ -66,8 +86,8 @@
 
     <!-- Сабтайтл под кнопкой -->
     <div id="result_label" class="h2" data-i18n="translator_result">Результат</div>
-    <!-- Карточка с ответом. Только текст внутри, без заголовка -->
-    <div id="out" class="card" style="margin-top:8px;white-space:pre-wrap;">
+    <!-- Адаптивная карточка результата -->
+    <div id="out" class="card">
       <div id="out_text"></div>
     </div>
   </div>
@@ -94,7 +114,7 @@
   // Telegram
   (function(){const tg=window.Telegram&&window.Telegram.WebApp; if(!tg)return; tg.expand(); tg.ready();})();
 
-  // Upload (без dnd) — карточка создаётся/удаляется динамически
+  // Upload (без dnd)
   const MAX_MB=10; let selectedFile=null; let previewUrl=null; let fileCardEl=null;
   const humanSize=b=>{const mb=b/1024/1024; return mb>=1?mb.toFixed(2)+' MB':(b/1024).toFixed(0)+' KB';};
   function removeFileCard(){ if(fileCardEl){fileCardEl.remove();fileCardEl=null;} if(previewUrl){URL.revokeObjectURL(previewUrl);previewUrl=null;} }
@@ -120,10 +140,10 @@
     const res=await fetch('/api/translate',{method:'POST',body:fd}); const data=await res.json().catch(()=>({})); if(!res.ok) throw new Error(data.error||'Server error'); return data.text; }
   function setHint(msg){ const h=$('#hint'); if(msg){h.textContent=msg; h.style.display='block';} else h.style.display='none'; }
 
-  // Показ результата: сначала показываем сабтайтл, затем карточку
+  // Показ результата
   function showResult(text){
     $('#result_label').style.display='block';
-    $('#out_text').textContent=text||'—';
+    $('#out_text').textContent = (text||'—').trim(); // страхуемся от случайных переводов с \n в начале
     $('#out').classList.add('show');
   }
   function hideResult(){
