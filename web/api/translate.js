@@ -3,13 +3,8 @@ import OpenAI from "openai";
 import formidable from "formidable";
 import { promises as fsp } from "node:fs";
 
-// В некоторых окружениях top-level import "pdf-parse" вызывает чтение test-файла и крашит функцию.
-// Поэтому импортируем его динамически ТОЛЬКО при обработке PDF и оборачиваем в try/catch.
-
-// Полезно для Next API routes; в Node Functions не обязательно, но не мешает:
+// На Node Functions это не обязательно, но не мешает
 export const config = { api: { bodyParser: false } };
-
-const client = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
 export default async function handler(req, res) {
   if (req.method !== "POST") {
@@ -17,8 +12,19 @@ export default async function handler(req, res) {
     return;
   }
 
+  // ---- ПРОВЕРКА КЛЮЧА, чтобы не падать на старте ----
+  const apiKey = process.env.OPENAI_API_KEY;
+  if (!apiKey) {
+    res.status(500).json({
+      error:
+        "OPENAI_API_KEY не задан на сервере. Добавьте переменную в Vercel → Project → Settings → Environment Variables (Preview/Production) и redeploy."
+    });
+    return;
+  }
+  const client = new OpenAI({ apiKey });
+
   try {
-    // 1) Разбираем multipart/form-data
+    // 1) Разбор multipart/form-data
     const form = formidable({
       multiples: false,
       maxFileSize: 10 * 1024 * 1024, // 10 MB
@@ -68,16 +74,15 @@ export default async function handler(req, res) {
 
         out.push(r.choices?.[0]?.message?.content?.trim() || "");
       } else if (mime === "application/pdf") {
-        // PDF: пробуем подключить парсер ТОЛЬКО здесь
+        // PDF парсим динамически, чтобы не падать при импорте
         let pdfParse;
         try {
           const mod = await import("pdf-parse");
-          pdfParse = mod.default || mod; // совместимость ESM/CJS
+          pdfParse = mod.default || mod;
         } catch (e) {
           console.error("pdf-parse import failed:", e);
           res.status(501).json({
-            error:
-              "Парсер PDF временно недоступен на сервере. Пожалуйста, загрузите фото/скрин страницы вместо PDF."
+            error: "Парсер PDF недоступен на сервере. Загрузите фото/скрин страницы вместо PDF."
           });
           return;
         }
@@ -99,11 +104,9 @@ export default async function handler(req, res) {
             out.push("[PDF: не удалось извлечь текст (похоже на скан без текстового слоя). Загрузите фото/скрин страницы.]");
           }
         } catch (e) {
-          // типичная проблема: ENOENT на test-файл внутри пакета у некоторых сборок
           console.error("pdf-parse error:", e);
           res.status(400).json({
-            error:
-              "Не удалось извлечь текст из PDF. Попробуйте загрузить фото/скрин страницы."
+            error: "Не удалось извлечь текст из PDF. Попробуйте загрузить фото/скрин страницы."
           });
           return;
         }
