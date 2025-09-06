@@ -100,4 +100,18 @@
   "item.parallel_options": "Паралельні опції (навчання/робота)",
   "item.obligations": "Поточні обов'язки та продовження",
   "item.employer_change": "Зміна роботодавця (за потреби)"
+
+  "translator_title": "AI перекладач",
+  "translator_from": "З мови",
+  "translator_to": "На мову",
+  "translator_placeholder": "Вставте текст для перекладу…",
+  "translator_do": "Перекласти",
+  "translator_err_empty": "Введіть текст або завантажте документ",
+  "translator_or": "або завантажте документ (фото/PDF):",
+  "translator_drop": "Перетягніть файл сюди або натисніть, щоб обрати",
+  "translator_remove": "Видалити",
+  "translator_err_type": "Дозволені лише зображення та PDF",
+  "translator_err_size": "Файл більший за {mb} МБ",
+  "translator_result": "Результат"
+
 }
