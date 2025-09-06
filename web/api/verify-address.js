@@ -18,33 +18,30 @@ function getApiKey() {
 
 const RULES = {
   common: `
-- Дата документа должна быть не старше 12 месяцев.
-- Адрес должен включать улицу, номер дома/квартиры, почтовый индекс и город.
-- ФИО заявителя должно совпадать с документом/PESEL (если встречается).
-- Должны быть подписи сторон и/или печать учреждения для официоза.
-- Если есть периоды проживания — укажи начало/конец; начало не может быть в будущем.
-- severity: "critical" (недействительно), "major" (нельзя использовать без исправлений), "minor" (косметика).
+- Принимай документы на PL/RU/UA/BY; встречаются формы: "Umowa najmu", "Zaświadczenie o zameldowaniu".
+- Поля для извлечения: ФИО, адрес (улица, дом, кв), индекс PL вида NN-NNN, город; даты (doc_date/valid_from/valid_to); issuer; наличие подписей/печати.
+- Если фото под углом/шум — постарайся прочитать ключевые слова-метки ("Data", "Adres", "Miejscowość", "Kod pocztowy", "PESEL", "Wynajmujący", "Najemca", "Urząd").
+- severity: critical (недействительно), major (нужно исправить), minor (косметика).
 `,
   lease_standard: `
-Тип: обычный договор аренды (umowa najmu).
-Критично: адрес, стороны (наймодатель/наниматель), дата/срок, подписи обеих сторон.
-Дополнительно: протокол приёма-передачи — опционален.
+Тип: Umowa najmu (обычная).
+Критично: адрес, стороны (Wynajmujący/Najemca), срок/дата, подписи обеих сторон.
 `,
   lease_okazjonalna: `
-Тип: umowa najmu okazjonalnego.
-Критично: требования обычного договора + нотариальное заявление о poddaniu się egzekucji, адрес "na wypadek", согласие владельца запасного жилья, подписи/даты на приложениях.
+Тип: Umowa najmu okazjonalnego.
+Критично: обычные требования + нотариальное заявление (poddanie się egzekucji), адрес "na wypadek", согласие właściciela zapasowego жилья; подписи/даты на приложениях.
 `,
   meldunek: `
-Тип: zaświadczenie o zameldowaniu (мелдунек).
-Критично: учреждение (UM/UG), данные лица (ФИО/PESEL), адрес, вид (czasowy/stały), даты, печать/номер справки/штрих-код.
+Тип: Zaświadczenie o zameldowaniu (мелдунек).
+Критично: орган (UM/UG), ФИО/PESEL, адрес, вид (czasowy/stały), даты, печать/номер справки/штрих-код.
 `,
   owner: `
-Тип: подтверждение адреса собственника.
-Критично: документ собственности (KW/акт) + заявление о проживании, совпадение ФИО/адреса, дата и подпись собственника.
+Тип: Вы — собственник.
+Критично: документ собственности (KW/акт) + заявление, совпадение ФИО/адреса, дата и подпись собственника/печать.
 `,
   other: `
-Тип: другое подтверждение адреса (oświadczenie владельца, заcвидетельствование общежития и т.д.).
-Проверь по общим правилам: адрес, стороны, подписи/печати, даты.
+Тип: Другое подтверждение адреса.
+Проверяй по общим правилам: адрес, стороны, подписи/печати, даты.
 `,
 };
 
@@ -53,7 +50,7 @@ const OUTPUT_SPEC = `
 {
   "verdict": "pass" | "fail" | "uncertain",
   "message": "краткое резюме",
-  "errors": [{"code": "STRING", "title": "STRING", "detail": "STRING", "severity": "critical|major|minor"}],
+  "errors": [{"code":"STRING","title":"STRING","detail":"STRING","severity":"critical|major|minor"}],
   "recommendations": ["STRING", ...],
   "fieldsExtracted": {
     "full_name": "STRING|null",
@@ -65,7 +62,8 @@ const OUTPUT_SPEC = `
     "valid_to": "YYYY-MM-DD|null",
     "issuer": "STRING|null",
     "signatures_present": true|false|null
-  }
+  },
+  "raw_text_excerpt": "STRING|null"
 }
 Только JSON, без пояснений.
 `;
@@ -84,7 +82,7 @@ export default async function handler(req, res) {
   const client = new OpenAI({ apiKey });
 
   try {
-    // 1) multipart/form-data через formidable
+    // multipart/form-data
     const form = formidable({
       multiples: false,
       maxFileSize: 10 * 1024 * 1024,
@@ -110,55 +108,85 @@ export default async function handler(req, res) {
     const mime = fileRec.mimetype || "application/octet-stream";
 
     const baseInstruction = `
-Ты — помощник-верификатор. Проверь документ подтверждения адреса в Польше.
+Ты — помощник-верификатор. Сначала максимально точно РАСПОЗНАЙ текст (OCR: буквенно-цифровые блоки, индексы NN-NNN, даты dd.mm.yyyy/yyyy-mm-dd), затем оцени корректность по правилам.
 Правила:
 ${RULES.common}
-Специфика для типа "${docType}":
-${RULES[docType] || RULES.other}
-Если контента мало/нечитаемо — поставь verdict=uncertain и опиши, какие элементы/страницы переснять.
-${OUTPUT_SPEC}
+Специфика: ${RULES[docType] || RULES.other}
+Если критично нечитабельно — verdict=uncertain и чётко перечисли, какие элементы переснять. ${OUTPUT_SPEC}
 `.trim();
 
-    // 2) Готовим сообщения для модели
     let messages;
 
     if (mime === "application/pdf") {
-      // ⚠️ Динамический импорт pdf-parse — чтобы избежать ENOENT при старте
+      // Пробуем текстовый слой
       let pdfParse;
       try {
         const mod = await import("pdf-parse");
         pdfParse = mod.default || mod;
       } catch (e) {
         console.error("pdf-parse import failed:", e);
-        res.status(501).json({ error: "Парсер PDF недоступен. Загрузите фото/скрин вместо PDF." });
-        return;
       }
 
-      try {
-        const parsed = await pdfParse(buf);
-        const pdfText = (parsed.text || "").trim();
-        if (!pdfText) {
-          res.status(400).json({ error: "Не удалось извлечь текст из PDF (возможно, скан). Загрузите фото/скрин." });
+      if (pdfParse) {
+        try {
+          const parsed = await pdfParse(buf);
+          const pdfText = (parsed.text || "").trim();
+          if (pdfText) {
+            messages = [
+              { role: "system", content: baseInstruction },
+              { role: "user", content: `OCR-текст из PDF:\n\n${pdfText.slice(0, 20000)}` },
+            ];
+          } else {
+            res.status(400).json({ error: "PDF — это скан без текста. Загрузите фото/скрин страницы." });
+            return;
+          }
+        } catch (e) {
+          console.error("pdf-parse error:", e);
+          res.status(400).json({ error: "Не удалось обработать PDF. Загрузите фото/скрин." });
           return;
         }
-        messages = [
-          { role: "system", content: baseInstruction },
-          { role: "user", content: `Вот распознанный текст PDF:\n\n${pdfText.slice(0, 20000)}` },
-        ];
-      } catch (e) {
-        console.error("pdf-parse error:", e);
-        res.status(400).json({ error: "Не удалось обработать PDF. Загрузите фото/скрин." });
+      } else {
+        res.status(501).json({ error: "Парсер PDF недоступен. Загрузите фото/скрин." });
         return;
       }
     } else if (mime.startsWith("image/")) {
-      const dataUrl = `data:${mime};base64,${buf.toString("base64")}`;
+      // Улучшение низкого качества: sharp (динамический импорт)
+      let variants = [];
+      try {
+        const sharp = (await import("sharp")).default;
+        // 1) Оригинал — безопасный ресайз и поворот
+        const origJpeg = await sharp(buf)
+          .rotate() // EXIF
+          .resize({ width: 2000, withoutEnlargement: true })
+          .jpeg({ quality: 90 })
+          .toBuffer();
+
+        // 2) Усиленная версия — для слабого OCR (градации, нормализация, шарп)
+        const enhancedJpeg = await sharp(origJpeg)
+          .grayscale()
+          .normalize()
+          .sharpen()
+          .jpeg({ quality: 95 })
+          .toBuffer();
+
+        variants = [origJpeg, enhancedJpeg];
+      } catch (e) {
+        console.warn("sharp unavailable, fall back to original image", e?.message);
+        variants = [buf];
+      }
+
+      const imgs = variants.map((b) => ({
+        type: "image_url",
+        image_url: { url: `data:image/jpeg;base64,${b.toString("base64")}` },
+      }));
+
       messages = [
         { role: "system", content: baseInstruction },
         {
           role: "user",
           content: [
-            { type: "text", text: "Проанализируй этот документ по правилам выше и верни СТРОГО JSON по спецификации." },
-            { type: "image_url", image_url: { url: dataUrl } },
+            { type: "text", text: "Проанализируй документ. Сначала сделай внутренний OCR, затем верни СТРОГО JSON по схеме." },
+            ...imgs,
           ],
         },
       ];
@@ -167,26 +195,30 @@ ${OUTPUT_SPEC}
       return;
     }
 
-    // 3) Вызов модели с JSON-ответом
+    // Модель с лучшим зрением
     const completion = await client.chat.completions.create({
-      model: "gpt-4o-mini",
+      model: "gpt-4o",
       response_format: { type: "json_object" },
       messages,
-      temperature: 0.2,
+      temperature: 0.1,
     });
 
     let json;
     try {
       json = JSON.parse(completion.choices?.[0]?.message?.content || "{}");
     } catch {
-      json = { verdict: "uncertain", message: "Не удалось распарсить ответ модели", errors: [], recommendations: [], fieldsExtracted: {} };
+      json = { verdict: "uncertain", message: "Не удалось распарсить ответ модели", errors: [], recommendations: [], fieldsExtracted: {}, raw_text_excerpt: null };
     }
 
-    // sanity defaults
+    // sanity
     json.verdict = json.verdict || "uncertain";
     json.errors = Array.isArray(json.errors) ? json.errors : [];
     json.recommendations = Array.isArray(json.recommendations) ? json.recommendations : [];
     json.fieldsExtracted = json.fieldsExtracted || {};
+    if (!("raw_text_excerpt" in json)) json.raw_text_excerpt = null;
+
+    // Лёгкая нормализация индекса/дат (если модель их положила в message)
+    // Дополнительно можно дописать регексы здесь.
 
     res.status(200).json(json);
   } catch (e) {
