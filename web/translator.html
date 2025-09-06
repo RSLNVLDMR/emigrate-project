@@ -11,7 +11,7 @@
     .footer{position:sticky;bottom:0;z-index:4}
     button,.btn,select,input,textarea{pointer-events:auto;touch-action:manipulation;-webkit-tap-highlight-color:transparent}
 
-    /* карточка выбранного файла */
+    /* карточка выбранного файла (создаём динамически) */
     .filecard{
       display:flex; align-items:center; gap:12px;
       border:1px solid var(--line); border-radius:12px; padding:10px 12px; margin-top:10px;
@@ -76,15 +76,8 @@
         <button id="pick" type="button" class="btn secondary" data-i18n="translator_select">Выбрать файл</button>
       </div>
 
-      <!-- карточка файла (показывается только когда файл выбран) -->
-      <div id="filecard" class="filecard hidden">
-        <div id="thumb" class="filethumb">PDF</div>
-        <div class="col" style="flex:1">
-          <div id="fname" class="p">—</div>
-          <small id="fmeta" class="muted">—</small>
-        </div>
-        <button id="remove" class="xbtn" data-i18n="translator_remove">Удалить</button>
-      </div>
+      <!-- сюда динамически вставим карточку файла, если он выбран -->
+      <div id="filewrap"></div>
     </div>
 
     <div class="footer">
@@ -129,47 +122,76 @@
   // Telegram
   (function(){ const tg=window.Telegram&&window.Telegram.WebApp; if(!tg) return; tg.expand(); tg.ready(); })();
 
-  // ====== Upload (без drag-n-drop) ======
+  // ====== Upload (без drag-n-drop). Карточка создаётся/удаляется динамически ======
   const MAX_MB=10;
   let selectedFile=null;
   let previewUrl=null;
+  let fileCardEl=null;
 
   const humanSize = bytes => { const mb=bytes/1024/1024; return mb>=1?mb.toFixed(2)+' MB':(bytes/1024).toFixed(0)+' KB'; };
 
-  function ensureNoFileUI(){
-    selectedFile=null;
+  function removeFileCard(){
+    if(fileCardEl){ fileCardEl.remove(); fileCardEl=null; }
     if(previewUrl){ URL.revokeObjectURL(previewUrl); previewUrl=null; }
-    const input=$('#file'); if(input) input.value='';
-    $('#filecard')?.classList.add('hidden');
-    $('#thumb').textContent='PDF';
   }
 
-  function showFileCard(file){
-    $('#fname').textContent=file.name;
-    $('#fmeta').textContent=`${file.type||'binary'} · ${humanSize(file.size)}`;
+  function clearFile(){
+    selectedFile=null;
+    $('#file').value='';
+    removeFileCard(); // карточки нет -> и UI «чистый»
+  }
+
+  function createFileCard(file){
+    removeFileCard(); // на всякий случай
+
+    const card = document.createElement('div');
+    card.className = 'filecard';
+    const thumb = document.createElement('div');
+    thumb.className = 'filethumb';
+    const col = document.createElement('div');
+    col.className = 'col';
+    col.style.flex = '1';
+    const nameEl = document.createElement('div');
+    nameEl.className = 'p';
+    const meta = document.createElement('small');
+    meta.className = 'muted';
+    const btn = document.createElement('button');
+    btn.className = 'xbtn';
+    btn.textContent = t('translator_remove') || 'Удалить';
+
+    nameEl.textContent = file.name;
+    meta.textContent = `${file.type || 'binary'} · ${humanSize(file.size)}`;
+
     if(file.type.startsWith('image/')){
       previewUrl = URL.createObjectURL(file);
-      $('#thumb').innerHTML = `<img src="${previewUrl}" alt="preview" style="width:100%;height:100%;object-fit:cover;border-radius:6px">`;
+      thumb.innerHTML = `<img src="${previewUrl}" alt="preview" style="width:100%;height:100%;object-fit:cover;border-radius:6px">`;
     } else {
-      $('#thumb').textContent='PDF';
+      thumb.textContent = 'PDF';
     }
-    $('#filecard').classList.remove('hidden');
+
+    btn.onclick = clearFile;
+
+    col.appendChild(nameEl); col.appendChild(meta);
+    card.appendChild(thumb); card.appendChild(col); card.appendChild(btn);
+
+    $('#filewrap').appendChild(card);
+    fileCardEl = card;
   }
 
   function acceptFile(file){
     if(!file) return;
-    const okType=file.type.startsWith('image/') || file.type==='application/pdf';
+    const okType = file.type.startsWith('image/') || file.type === 'application/pdf';
     if(!okType){ alert(t('translator_err_type')); return; }
-    if(file.size>MAX_MB*1024*1024){ alert((t('translator_err_size')||'Файл больше {mb} МБ').replace('{mb}',MAX_MB)); return; }
-    selectedFile=file; showFileCard(file);
+    if(file.size > MAX_MB*1024*1024){ alert((t('translator_err_size')||'Файл больше {mb} МБ').replace('{mb}',MAX_MB)); return; }
+    selectedFile = file;
+    createFileCard(file);
   }
 
   function bindUploader(){
     $('#pick').onclick = ()=> $('#file').click();
     $('#file').addEventListener('change', e=> acceptFile(e.target.files?.[0]));
-    $('#remove').onclick = ensureNoFileUI;
-    // стартовое состояние — без карточки
-    ensureNoFileUI();
+    // старт — без карточки и без данных
+    clearFile();
   }
 
   // ====== API ======
