@@ -113,6 +113,8 @@
   "translator_err_type": "Допустимы только изображения и PDF",
   "translator_err_size": "Файл больше {mb} МБ",
   "translator_result": "Результат"
+  "translator_select": "Выбрать файл"
+
 
 
 }
