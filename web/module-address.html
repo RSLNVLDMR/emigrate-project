@@ -1,0 +1,202 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8" />
+  <title>Подтверждение адреса — eMigrant</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <script src="https://telegram.org/js/telegram-web-app.js"></script>
+  <link rel="stylesheet" href="./styles.css" />
+  <style>
+    .filecard{display:flex;align-items:center;gap:12px;border:1px solid var(--line);border-radius:12px;padding:10px 12px;background:transparent;max-width:100%}
+    .filethumb{width:48px;height:48px;border-radius:8px;border:1px solid var(--line);background:var(--card);display:flex;align-items:center;justify-content:center;overflow:hidden;font-weight:700;color:var(--muted)}
+    .xbtn{background:transparent;border:1px solid var(--line);border-radius:8px;padding:4px 8px;cursor:pointer;color:var(--muted)}
+    details{border:1px solid var(--line);border-radius:12px;padding:12px;background:transparent}
+    details>summary{cursor:pointer;font-weight:700;list-style:none}
+    details>summary::-webkit-details-marker{display:none}
+    .status{display:inline-flex;gap:8px;align-items:center}
+    .dot{width:8px;height:8px;border-radius:999px;background:var(--warn)}
+    .dot.ok{background:var(--ok)}
+    .dot.err{background:var(--danger)}
+    #resultBox{display:none}
+    #resultBox.show{display:block}
+    #errors li{margin:6px 0}
+  </style>
+</head>
+<body>
+<div class="screen">
+  <div class="container">
+    <div class="header">
+      <div class="h1">Подтверждение адреса</div>
+      <div class="lang">
+        <button data-lang="ru" class="active">RU</button>
+        <button data-lang="ua">UA</button>
+        <button data-lang="by">BY</button>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="h2">Зачем нужен документ</div>
+      <p class="p">Подтверждение адреса требуется для карты побыту, банковского счёта, в ZUS/Urząd Skarbowy и др. Подойдут: мелдунек (zaświadczenie o zameldowaniu), договор аренды, акт приема-передачи/проживания, документы собственника с заявлением о проживании и т.п.</p>
+    </div>
+
+    <details open style="margin-top:12px">
+      <summary>Как оформить</summary>
+      <div class="col" style="margin-top:8px">
+        <div class="item"><div class="badge">Скоро</div><div>Умова найму (обычная) — сюда добавим пошаговую инструкцию.</div></div>
+        <div class="item"><div class="badge">Скоро</div><div>Умова найму okazjonalna — отдельные нюансы: нотариальное заявление, указание адреса «на wypadek» и пр.</div></div>
+        <div class="item"><div class="badge">Скоро</div><div>Мелдунек — где и как получить в gmina/UM, какие данные должны стоять на справке.</div></div>
+        <div class="item"><div class="badge">Скоро</div><div>Вы — собственник жилья (księga wieczysta/акт) — как подготовить подтверждение для ужонда/банка.</div></div>
+        <small class="muted">Мы подставим точные тексты и нюансы для каждого сценария после анкеты. Пока — плейсхолдер.</small>
+      </div>
+    </details>
+
+    <div class="card" style="margin-top:12px">
+      <div class="h2">У меня уже есть документ</div>
+
+      <label class="col" style="margin-bottom:8px">
+        <span>Тип документа</span>
+        <select id="docType" class="input">
+          <option value="lease_standard">Договор аренды (обычный)</option>
+          <option value="lease_okazjonalna">Договор аренды okazjonalna</option>
+          <option value="meldunek">Мелдунек (zaświadczenie o zameldowaniu)</option>
+          <option value="owner">Вы — собственник жилья</option>
+          <option value="other">Другое подтверждение адреса</option>
+        </select>
+      </label>
+
+      <div class="col" id="uploadZone">
+        <small class="muted">Загрузите фото или PDF (до 10 МБ):</small>
+        <div class="row" style="gap:8px">
+          <input id="file" type="file" accept="application/pdf,image/*" hidden />
+          <button id="pick" type="button" class="btn secondary">Выбрать файл</button>
+        </div>
+        <div id="preview"></div>
+      </div>
+
+      <div class="row" style="justify-content:space-between;margin-top:12px">
+        <div class="status"><span class="dot" id="statusDot"></span><small id="statusText" class="muted">Проверка не запущена</small></div>
+        <div class="row" style="gap:8px">
+          <button id="run" class="btn">Проверить</button>
+          <button id="speed" class="btn secondary" title="Оплата будет позже" disabled>Ускорить (5 мин)</button>
+        </div>
+      </div>
+
+      <div id="resultBox" class="card" style="margin-top:12px">
+        <div class="h2" style="margin-top:0">Результат</div>
+        <p id="verdict" class="p"></p>
+        <div id="blockErrors" class="col hidden">
+          <div class="h2">Ошибки и замечания</div>
+          <ul id="errors"></ul>
+        </div>
+        <div id="blockRecos" class="col hidden">
+          <div class="h2">Что исправить</div>
+          <ul id="recos"></ul>
+        </div>
+        <details style="margin-top:8px">
+          <summary>Извлечённые поля</summary>
+          <pre id="fields" style="white-space:pre-wrap;overflow-wrap:anywhere;margin:8px 0 0"></pre>
+        </details>
+        <small class="muted">Сообщение также придёт в бота.</small>
+      </div>
+
+      <small class="muted" style="display:block;margin-top:8px">
+        По умолчанию проверка занимает до 24 часов. После оплаты — до 5 минут. (Оплата появится позже; для теста ответ приходит сразу.)
+      </small>
+    </div>
+  </div>
+
+  <div class="tabs">
+    <a class="tab" href="./translator.html">Переводчик</a>
+    <a class="tab" href="./checklist.html">Чеклист</a>
+    <a class="tab" href="./consultant.html">Консультант</a>
+  </div>
+</div>
+
+<script>
+(function(){
+  const $=(s,r=document)=>r.querySelector(s);
+  const humanSize=b=>{const mb=b/1024/1024; return mb>=1?mb.toFixed(2)+' MB':(b/1024).toFixed(0)+' KB';};
+  const MAX_MB=10;
+  let file=null, previewUrl=null, cardEl=null;
+
+  const tg=window.Telegram?.WebApp; if(tg){tg.expand(); tg.ready();}
+
+  function setStatus(type,text){
+    $('#statusText').textContent=text;
+    const d=$('#statusDot'); d.classList.remove('ok','err');
+    if(type==='ok') d.classList.add('ok');
+    else if(type==='err') d.classList.add('err');
+  }
+
+  function clearPreview(){
+    if(cardEl){cardEl.remove();cardEl=null;}
+    if(previewUrl){URL.revokeObjectURL(previewUrl);previewUrl=null;}
+    file=null; $('#file').value='';
+  }
+  function makePreview(f){
+    clearPreview();
+    const card=document.createElement('div'); card.className='filecard';
+    const thumb=document.createElement('div'); thumb.className='filethumb';
+    const col=document.createElement('div'); col.className='col'; col.style.flex='1';
+    const name=document.createElement('div'); name.className='p'; name.textContent=f.name;
+    const meta=document.createElement('small'); meta.className='muted'; meta.textContent=(f.type||'binary')+' · '+humanSize(f.size);
+    const del=document.createElement('button'); del.className='xbtn'; del.textContent='Удалить'; del.onclick=clearPreview;
+    if(f.type.startsWith('image/')){ previewUrl=URL.createObjectURL(f); thumb.innerHTML=`<img src="${previewUrl}" alt="preview" style="width:100%;height:100%;object-fit:cover;border-radius:6px">`; } else { thumb.textContent='PDF'; }
+    col.appendChild(name); col.appendChild(meta); card.appendChild(thumb); card.appendChild(col); card.appendChild(del);
+    $('#preview').appendChild(card); cardEl=card;
+  }
+  $('#pick').onclick=()=>$('#file').click();
+  $('#file').addEventListener('change',e=>{
+    const f=e.target.files?.[0]; if(!f) return;
+    if(!(f.type.startsWith('image/') || f.type==='application/pdf')) return alert('Поддерживаем только фото и PDF');
+    if(f.size>MAX_MB*1024*1024) return alert('Файл больше '+MAX_MB+' МБ');
+    file=f; makePreview(f); setStatus(null,'Файл загружен — можно запускать проверку');
+  });
+
+  async function verify(){
+    if(!file) return alert('Сначала загрузите файл');
+    setStatus(null,'Проверяем…');
+    $('#resultBox').classList.remove('show');
+    const fd=new FormData();
+    fd.append('file',file,file.name);
+    fd.append('docType',$('#docType').value);
+    try{
+      const res=await fetch('/api/verify-address',{method:'POST',body:fd});
+      const data=await res.json();
+      if(!res.ok) throw new Error(data.error||'Ошибка сервера');
+      renderResult(data);
+      setStatus(data.verdict==='pass'?'ok':(data.verdict==='fail'?'err':null),
+               data.verdict==='pass'?'Проверка пройдена':(data.verdict==='fail'?'Есть ошибки':'Неопределённо'));
+      // TODO: сюда же дернём уведомление в бота
+    }catch(e){
+      console.error(e);
+      setStatus('err','Не удалось проверить документ');
+      alert('Ошибка: '+e.message);
+    }
+  }
+
+  function renderResult(data){
+    const verdict=$('#verdict'); const errBlock=$('#blockErrors'); const recBlock=$('#blockRecos');
+    verdict.textContent = data.message || (data.verdict==='pass'?'Документ принят. Критичных ошибок не найдено.':
+                         data.verdict==='fail'?'Есть ошибки — см. ниже.':'Не удалось уверенно определить корректность документа.');
+    // ошибки
+    const errs=(data.errors||[]); const ulE=$('#errors'); ulE.innerHTML='';
+    if(errs.length){ errBlock.classList.remove('hidden'); errs.forEach(e=>{
+      const li=document.createElement('li'); li.innerHTML=`<b>${e.title||e.code||'Ошибка'}</b>${e.severity?' · '+e.severity.toUpperCase():''}<br><small class="muted">${e.detail||''}</small>`;
+      ulE.appendChild(li);
+    }); } else errBlock.classList.add('hidden');
+    // рекомендации
+    const recs=(data.recommendations||[]); const ulR=$('#recos'); ulR.innerHTML='';
+    if(recs.length){ recBlock.classList.remove('hidden'); recs.forEach(r=>{const li=document.createElement('li'); li.textContent=r; ulR.appendChild(li);});}
+    else recBlock.classList.add('hidden');
+
+    $('#fields').textContent = JSON.stringify(data.fieldsExtracted||{}, null, 2);
+    $('#resultBox').classList.add('show');
+  }
+
+  $('#run').onclick=verify;
+  $('#speed').onclick=()=>alert('Оплата и ускорение появятся позже 🙂');
+})();
+</script>
+</body>
+</html>
