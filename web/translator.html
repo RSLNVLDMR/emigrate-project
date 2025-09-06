@@ -7,7 +7,7 @@
   <script src="https://telegram.org/js/telegram-web-app.js"></script>
   <link rel="stylesheet" href="./styles.css" />
   <style>
-    .filecard{display:flex;align-items:center;gap:12px;border:1px solid var(--line);border-radius:12px;padding:10px 12px;margin-top:10px;background:transparent}
+    .filecard{display:flex;align-items:center;gap:12px;border:1px solid var(--line);border-radius:12px;padding:10px 12px;margin-top:10px;background:transparent;max-width:100%}
     .filethumb{width:48px;height:48px;border-radius:8px;border:1px solid var(--line);background:var(--card);display:flex;align-items:center;justify-content:center;overflow:hidden;font-weight:700;color:var(--muted)}
     .xbtn{background:transparent;border:1px solid var(--line);border-radius:8px;padding:4px 8px;cursor:pointer;color:var(--muted)}
   </style>
@@ -114,12 +114,12 @@
   function showResult(text){
     $('#result_label').style.display='block';
     $('#out_text').textContent = (text||'—').replace(/^\s+/, '');
-    $('#out').classList.add('show');         // включает display:block через CSS
+    $('#out').classList.add('show');
   }
   function hideResult(){
     $('#result_label').style.display='none';
     $('#out_text').textContent='';
-    $('#out').classList.remove('show');      // карточка снова полностью скрыта
+    $('#out').classList.remove('show');
   }
 
   function bindActions(){ $('#go').onclick=async()=>{ const text=$('#src').value.trim(); if(!text && !selectedFile){alert(t('translator_err_empty')||'Нечего переводить');return;}
