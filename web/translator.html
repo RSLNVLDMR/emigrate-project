@@ -12,27 +12,34 @@
     button,.btn,select,input,textarea{pointer-events:auto;touch-action:manipulation;-webkit-tap-highlight-color:transparent}
     .filecard{display:flex;align-items:center;gap:12px;border:1px solid var(--line);border-radius:12px;padding:10px 12px;margin-top:10px;background:transparent}
     .filethumb{width:48px;height:48px;border-radius:8px;border:1px solid var(--line);background:var(--card);display:flex;align-items:center;justify-content:center;overflow:hidden;font-weight:700;color:var(--muted)}
-    #out{display:none}
-    #out.show{display:block}
+
+    /* Результат — по умолчанию скрыт */
     #result_label{display:none;margin-top:16px}
+    #out{display:none}
 
-    /* === Точные правки для блока результата === */
+    /* ——— Жёсткие оверрайды карточки результата ——— */
+    #out.show{display:block}
     #out{
-      /* Перекрываем возможные глобальные min-height/height у .card */
-      min-height: 0 !important;
-      height: auto !important;
-      max-height: none !important;
+      /* полностью отключаем «флексовость» и фикс-высоты базового .card */
+      display:block !important;
+      min-height:0 !important;
+      height:auto !important;
+      max-height:none !important;
+      align-items:stretch !important;
+      justify-content:flex-start !important;
 
-      /* Компактные внутренние отступы, чтобы текст начинался сразу сверху */
-      padding: 12px 14px !important;
+      /* компактные отступы, чтобы текст начинался почти у верхней границы */
+      padding:12px 14px !important;
 
-      /* Адаптивный контейнер под контент */
-      margin-top: 8px;
-      white-space: pre-wrap;
+      /* типографика */
+      margin-top:8px;
+      white-space:pre-wrap;
+      line-height:1.45;
     }
     #out_text{
-      margin: 0;                 /* убираем возможные внешние отступы */
-      line-height: 1.45;         /* читаемость без лишней «воздушки» сверху */
+      margin:0 !important;            /* убираем любые внешние отступы */
+      padding:0 !important;
+      display:block;
     }
 
     .xbtn{background:transparent;border:1px solid var(--line);border-radius:8px;padding:4px 8px;cursor:pointer;color:var(--muted)}
@@ -140,10 +147,10 @@
     const res=await fetch('/api/translate',{method:'POST',body:fd}); const data=await res.json().catch(()=>({})); if(!res.ok) throw new Error(data.error||'Server error'); return data.text; }
   function setHint(msg){ const h=$('#hint'); if(msg){h.textContent=msg; h.style.display='block';} else h.style.display='none'; }
 
-  // Показ результата
   function showResult(text){
     $('#result_label').style.display='block';
-    $('#out_text').textContent = (text||'—').trim(); // страхуемся от случайных переводов с \n в начале
+    const t = (text||'—').replace(/^\s+/, ''); // убираем возможные лидирующие переносы
+    $('#out_text').textContent = t;
     $('#out').classList.add('show');
   }
   function hideResult(){
