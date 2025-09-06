@@ -18,7 +18,7 @@
   "q_student_inst": "Учебное заведение",
   "q_student_doc": "Документ",
   "q_student_doc_adm": "Zaświadczenie o przyjęciu",
-  "q_student_doc_study": "Zaświadczenie o studiowaniu",
+  "q_student_doc_study": "Zaświadczenie о studiowaniu",
   "q_student_start": "Начало (ДД.ММ.ГГГГ)",
   "q_student_end": "Окончание (ДД.ММ.ГГГГ)",
 
@@ -68,7 +68,16 @@
   "translator_to": "На язык",
   "translator_placeholder": "Вставьте текст для перевода…",
   "translator_do": "Перевести",
-  "translator_err_empty": "Введите текст для перевода",
+  "translator_or": "или загрузите документ (фото/PDF):",
+  "translator_select": "Выбрать файл",
+  "translator_remove": "Удалить",
+  "translator_drop": "Перетащите файл сюда или нажмите, чтобы выбрать",
+  "translator_err_empty": "Введите текст или загрузите документ",
+  "translator_err_type": "Допустимы только изображения и PDF",
+  "translator_err_size": "Файл больше {mb} МБ",
+  "translator_result": "Результат",
+  "translator_processing": "Обрабатываем…",
+  "translator_err_server": "Ошибка сервера",
 
   "consult_title": "Связаться с консультантом",
   "consult_topic": "Коротко опишите запрос",
@@ -100,21 +109,4 @@
   "item.parallel_options": "Параллельные опции (учёба/работа)",
   "item.obligations": "Текущие обязанности и продление",
   "item.employer_change": "Смена работодателя (если нужно)"
-  
-  "translator_title": "AI переводчик",
-  "translator_from": "С языка",
-  "translator_to": "На язык",
-  "translator_placeholder": "Вставьте текст для перевода…",
-  "translator_do": "Перевести",
-  "translator_err_empty": "Введите текст или загрузите документ",
-  "translator_or": "или загрузите документ (фото/PDF):",
-  "translator_drop": "Перетащите файл сюда или нажмите, чтобы выбрать",
-  "translator_remove": "Удалить",
-  "translator_err_type": "Допустимы только изображения и PDF",
-  "translator_err_size": "Файл больше {mb} МБ",
-  "translator_result": "Результат"
-  "translator_select": "Выбрать файл"
-
-
-
 }
