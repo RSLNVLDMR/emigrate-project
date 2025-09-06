@@ -1,105 +1,55 @@
-// api/verify-address.js
+// web/api/verify-address.js
 import OpenAI from "openai";
-import pdf from "pdf-parse";
+import formidable from "formidable";
+import { promises as fsp } from "node:fs";
 
-export const config = {
-  api: { bodyParser: false }, // multipart/form-data
-};
+export const config = { api: { bodyParser: false } };
 
-const client = new OpenAI({ apiKey: process.env.OPENAI_API_KEY || process.env.OPEN_API_KEY });
-
-function bad(res, code, error) {
-  res.status(code).json({ error });
-}
-
-function readMultipart(req) {
-  return new Promise((resolve, reject) => {
-    let data = Buffer.from([]);
-    req.on("data", (chunk) => (data = Buffer.concat([data, chunk])));
-    req.on("end", () => {
-      // Very small naive multipart reader for Vercel – works because we only need 1 file + fields.
-      const ct = req.headers["content-type"] || "";
-      const m = ct.match(/boundary=(.+)$/i);
-      if (!m) return reject(new Error("No boundary"));
-      const boundary = "--" + m[1];
-      const parts = data.toString("binary").split(boundary).slice(1, -1);
-      let file = null, fields = {};
-      for (const part of parts) {
-        const [rawHeaders, rawBody] = part.split("\r\n\r\n");
-        const headers = rawHeaders.split("\r\n").filter(Boolean);
-        const disp = headers.find(h => h.toLowerCase().startsWith("content-disposition")) || "";
-        const nameM = disp.match(/name="([^"]+)"/); const filenameM = disp.match(/filename="([^"]*)"/);
-        const bodyBin = rawBody.slice(0, -2); // drop trailing \r\n
-        if (filenameM && filenameM[1]) {
-          const typeH = headers.find(h => h.toLowerCase().startsWith("content-type"));
-          file = {
-            filename: filenameM[1],
-            mimetype: typeH ? typeH.split(":")[1].trim() : "application/octet-stream",
-            buffer: Buffer.from(bodyBin, "binary"),
-          };
-        } else if (nameM) {
-          fields[nameM[1]] = bodyBin.toString("utf8");
-        }
-      }
-      resolve({ file, fields });
-    });
-    req.on("error", reject);
-  });
+function getApiKey() {
+  return (
+    process.env.OPENAI_API_KEY ||
+    process.env.OPEN_API_KEY ||
+    process.env.OPEN_AI_KEY ||
+    process.env.OPENAI_KEY ||
+    process.env.OPENAI ||
+    ""
+  );
 }
 
 const RULES = {
   common: `
 - Дата документа должна быть не старше 12 месяцев.
 - Адрес должен включать улицу, номер дома/квартиры, почтовый индекс и город.
-- ФИО заявителя должно совпадать с данными паспорта/PESEL (если встречается в документе).
-- Должны быть подписи сторон и/или печать учреждения, если это официозный документ.
-- Если периоды проживания присутствуют — укажите начало/конец и проверьте, что дата начала не в будущем.
-- Ошибки классифицируй по severity: "critical" (недействительность документа), "major" (нельзя использовать без исправлений), "minor" (косметика).
+- ФИО заявителя должно совпадать с документом/PESEL (если встречается).
+- Должны быть подписи сторон и/или печать учреждения для официоза.
+- Если есть периоды проживания — укажи начало/конец; начало не может быть в будущем.
+- severity: "critical" (недействительно), "major" (нельзя использовать без исправлений), "minor" (косметика).
 `,
   lease_standard: `
 Тип: обычный договор аренды (umowa najmu).
-Критично:
-- Прописан точный адрес арендуемого помещения.
-- Присутствуют стороны: наймодатель и наниматель (имена/фамилии, данные документа/PESEL при наличии).
-- Дата заключения и срок аренды (или бессрочно).
-- Подписи обеих сторон.
-Дополнительно:
-- Размер аренды необязателен для подтверждения адреса.
-- Приложения (protokół zdawczo-odbiorczy) — опционально, но хорошо.
+Критично: адрес, стороны (наймодатель/наниматель), дата/срок, подписи обеих сторон.
+Дополнительно: протокол приёма-передачи — опционален.
 `,
   lease_okazjonalna: `
 Тип: umowa najmu okazjonalnego.
-Критично:
-- Все пункты обычного договора аренды.
-- Нотариальное заявление наймателя о подdaniu się egzekucji.
-- Указан адрес «na wypadek» для wyprowadzki (владелец третьего жилья + его zgoda).
-- Подписи и даты на каждом приложении.
+Критично: требования обычного договора + нотариальное заявление о poddaniu się egzekucji, адрес "na wypadek", согласие владельца запасного жилья, подписи/даты на приложениях.
 `,
   meldunek: `
 Тип: zaświadczenie o zameldowaniu (мелдунек).
-Критично:
-- Название документа/учреждения (Urząd Gminy/Urząd Miasta).
-- Данные лица (ФИО, при наличии дата рождения/PESEL).
-- Адрес замельдования.
-- Вид замельдования (czasowy/stały) и даты (с ... по .../без срока).
-- Печать учреждения и/или штрих-код/номер справки.
+Критично: учреждение (UM/UG), данные лица (ФИО/PESEL), адрес, вид (czasowy/stały), даты, печать/номер справки/штрих-код.
 `,
   owner: `
 Тип: подтверждение адреса собственника.
-Критично:
-- Документы собственности (например, выписка z księgi wieczystej / akt notarialny) + заявление о проживании по адресу.
-- ФИО собственника совпадает с заявителем или есть письменное согласие на проживание.
-- Адрес совпадает.
-- Дата и подпись собственника.
+Критично: документ собственности (KW/акт) + заявление о проживании, совпадение ФИО/адреса, дата и подпись собственника.
 `,
   other: `
-Тип: другое подтверждение адреса (oświadczenie владельца, zaświadczenie от общежития и т.д.).
+Тип: другое подтверждение адреса (oświadczenie владельца, заcвидетельствование общежития и т.д.).
 Проверь по общим правилам: адрес, стороны, подписи/печати, даты.
 `,
 };
 
 const OUTPUT_SPEC = `
-Сформируй СТРОГО JSON:
+Верни СТРОГО JSON:
 {
   "verdict": "pass" | "fail" | "uncertain",
   "message": "краткое резюме",
@@ -121,19 +71,43 @@ const OUTPUT_SPEC = `
 `;
 
 export default async function handler(req, res) {
-  if (req.method !== "POST") return bad(res, 405, "Method not allowed");
-  if (!client.apiKey) return bad(res, 500, "OPENAI_API_KEY не задан на сервере.");
+  if (req.method !== "POST") {
+    res.status(405).json({ error: "Method not allowed" });
+    return;
+  }
+
+  const apiKey = getApiKey();
+  if (!apiKey) {
+    res.status(500).json({ error: "OPENAI_API_KEY не задан на сервере." });
+    return;
+  }
+  const client = new OpenAI({ apiKey });
 
   try {
-    const { file, fields } = await readMultipart(req);
-    if (!file) return bad(res, 400, "Файл не получен");
-    if (file.buffer.length > 10 * 1024 * 1024) return bad(res, 400, "Файл больше 10 МБ");
+    // 1) multipart/form-data через formidable
+    const form = formidable({
+      multiples: false,
+      maxFileSize: 10 * 1024 * 1024,
+      uploadDir: "/tmp",
+      keepExtensions: true,
+    });
 
-    const docType = (fields.docType || "other").trim();
+    const { fields, files } = await new Promise((resolve, reject) => {
+      form.parse(req, (err, flds, fls) => (err ? reject(err) : resolve({ fields: flds, files: fls })));
+    });
 
-    // Получаем текст для анализа: из PDF — текстом; из изображения — через vision.
-    let analysisText = null;
-    let messages;
+    const docType = (Array.isArray(fields.docType) ? fields.docType[0] : fields.docType) || "other";
+    const fileRec = files.file ? (Array.isArray(files.file) ? files.file[0] : files.file) : null;
+
+    if (!fileRec) {
+      res.status(400).json({ error: "Файл не получен" });
+      return;
+    }
+
+    const buf = await fsp.readFile(fileRec.filepath).finally(() => {
+      fsp.unlink(fileRec.filepath).catch(() => {});
+    });
+    const mime = fileRec.mimetype || "application/octet-stream";
 
     const baseInstruction = `
 Ты — помощник-верификатор. Проверь документ подтверждения адреса в Польше.
@@ -141,36 +115,59 @@ export default async function handler(req, res) {
 ${RULES.common}
 Специфика для типа "${docType}":
 ${RULES[docType] || RULES.other}
-Если контента мало/нечитаемо — верни verdict=uncertain и напиши какие страницы/элементы нужно перефотографировать.
+Если контента мало/нечитаемо — поставь verdict=uncertain и опиши, какие элементы/страницы переснять.
 ${OUTPUT_SPEC}
-`;
+`.trim();
 
-    if (file.mimetype === "application/pdf") {
-      const pdfData = await pdf(file.buffer).catch(() => null);
-      analysisText = pdfData?.text?.trim() || "";
-      messages = [
-        { role: "system", content: baseInstruction },
-        { role: "user", content: `Вот распознанный текст PDF:\n\n${analysisText.slice(0, 18000)}` },
-      ];
-    } else {
-      // image — отправляем в vision
-      const b64 = file.buffer.toString("base64");
+    // 2) Готовим сообщения для модели
+    let messages;
+
+    if (mime === "application/pdf") {
+      // ⚠️ Динамический импорт pdf-parse — чтобы избежать ENOENT при старте
+      let pdfParse;
+      try {
+        const mod = await import("pdf-parse");
+        pdfParse = mod.default || mod;
+      } catch (e) {
+        console.error("pdf-parse import failed:", e);
+        res.status(501).json({ error: "Парсер PDF недоступен. Загрузите фото/скрин вместо PDF." });
+        return;
+      }
+
+      try {
+        const parsed = await pdfParse(buf);
+        const pdfText = (parsed.text || "").trim();
+        if (!pdfText) {
+          res.status(400).json({ error: "Не удалось извлечь текст из PDF (возможно, скан). Загрузите фото/скрин." });
+          return;
+        }
+        messages = [
+          { role: "system", content: baseInstruction },
+          { role: "user", content: `Вот распознанный текст PDF:\n\n${pdfText.slice(0, 20000)}` },
+        ];
+      } catch (e) {
+        console.error("pdf-parse error:", e);
+        res.status(400).json({ error: "Не удалось обработать PDF. Загрузите фото/скрин." });
+        return;
+      }
+    } else if (mime.startsWith("image/")) {
+      const dataUrl = `data:${mime};base64,${buf.toString("base64")}`;
       messages = [
         { role: "system", content: baseInstruction },
         {
           role: "user",
           content: [
-            { type: "input_text", text: "Проанализируй этот документ на изображении по правилам выше и верни строго JSON по спецификации." },
-            {
-              type: "input_image",
-              image_url: `data:${file.mimetype};base64,${b64}`
-            }
-          ]
-        }
+            { type: "text", text: "Проанализируй этот документ по правилам выше и верни СТРОГО JSON по спецификации." },
+            { type: "image_url", image_url: { url: dataUrl } },
+          ],
+        },
       ];
+    } else {
+      res.status(400).json({ error: "Поддерживаются только фото и PDF" });
+      return;
     }
 
-    // Модель с JSON-ответом
+    // 3) Вызов модели с JSON-ответом
     const completion = await client.chat.completions.create({
       model: "gpt-4o-mini",
       response_format: { type: "json_object" },
@@ -179,10 +176,13 @@ ${OUTPUT_SPEC}
     });
 
     let json;
-    try { json = JSON.parse(completion.choices[0].message.content || "{}"); }
-    catch { json = { verdict: "uncertain", message: "Не удалось распарсить ответ модели", errors: [], recommendations: [], fieldsExtracted: {} }; }
+    try {
+      json = JSON.parse(completion.choices?.[0]?.message?.content || "{}");
+    } catch {
+      json = { verdict: "uncertain", message: "Не удалось распарсить ответ модели", errors: [], recommendations: [], fieldsExtracted: {} };
+    }
 
-    // Подстрахуем обязательные поля
+    // sanity defaults
     json.verdict = json.verdict || "uncertain";
     json.errors = Array.isArray(json.errors) ? json.errors : [];
     json.recommendations = Array.isArray(json.recommendations) ? json.recommendations : [];
@@ -190,7 +190,12 @@ ${OUTPUT_SPEC}
 
     res.status(200).json(json);
   } catch (e) {
-    console.error(e);
-    bad(res, 500, e.message || "Server error");
+    const msg = e?.message || String(e);
+    console.error("verify-address error:", e);
+    if (e?.status === 429 || /insufficient_quota|quota|rate/i.test(msg)) {
+      res.status(429).json({ error: "Превышена квота/нет кредитов для OpenAI API." });
+      return;
+    }
+    res.status(500).json({ error: msg || "Server error" });
   }
 }
