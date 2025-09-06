@@ -45,3 +45,24 @@ textarea{min-height:120px;resize:vertical}
 hr{border:0;border-top:1px solid var(--line);margin:12px 0}
 small{color:var(--muted)}
 .hidden{display:none}
+
+/* ================================
+   Спец-правки для translator.html
+   ================================ */
+#result_label{display:none;margin-top:16px}
+#out{                 /* блок результата скрыт до первого ответа */
+  display:none;
+  min-height:0 !important;
+  height:auto !important;
+  max-height:none !important;
+  padding:12px 14px !important;   /* компактнее, чтобы текст начинался сверху */
+  margin-top:8px;
+  white-space:pre-wrap;
+  line-height:1.45;
+}
+#out.show{display:block}
+#out_text{
+  margin:0 !important;
+  padding:0 !important;
+  display:block;
+}
