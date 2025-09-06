@@ -4,7 +4,7 @@ import formidable from "formidable";
 import { promises as fsp } from "node:fs";
 import pdfParse from "pdf-parse";
 
-// для совместимости с next/v0: отключаем встроенный bodyParser
+// гарантируем Node/serverless (а не Edge) и отключаем bodyParser
 export const config = { api: { bodyParser: false } };
 
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
@@ -16,10 +16,10 @@ export default async function handler(req, res) {
   }
 
   try {
-    // 1) Разбираем multipart/form-data
+    // 1) Разбор multipart/form-data
     const form = formidable({
       multiples: false,
-      maxFileSize: 10 * 1024 * 1024, // 10MB
+      maxFileSize: 10 * 1024 * 1024, // 10 MB
       uploadDir: "/tmp",
       keepExtensions: true
     });
@@ -34,7 +34,7 @@ export default async function handler(req, res) {
 
     const parts = [];
 
-    // 2) Если пришёл файл — обработаем
+    // 2) Файл (если есть)
     const fileRec = files.file ? (Array.isArray(files.file) ? files.file[0] : files.file) : null;
 
     if (fileRec) {
@@ -44,9 +44,8 @@ export default async function handler(req, res) {
       });
 
       if (mime.startsWith("image/")) {
-        // OCR + перевод через Chat Completions (мультимодальный ввод)
+        // OCR + перевод: мультимодальная Chat Completions
         const dataUrl = `data:${mime};base64,${buf.toString("base64")}`;
-
         const completion = await openai.chat.completions.create({
           model: "gpt-4o-mini",
           messages: [
@@ -63,10 +62,9 @@ export default async function handler(req, res) {
             }
           ]
         });
-
         parts.push(completion.choices?.[0]?.message?.content?.trim() || "");
       } else if (mime === "application/pdf") {
-        // Извлечение текста + перевод
+        // PDF: извлечь текст + перевод текста
         const parsed = await pdfParse(buf);
         const pdfText = (parsed.text || "").trim();
 
@@ -80,7 +78,7 @@ export default async function handler(req, res) {
           });
           parts.push(completion.choices?.[0]?.message?.content?.trim() || "");
         } else {
-          parts.push("[PDF: не удалось извлечь текст (похоже на скан без текстового слоя). Попробуйте загрузить фото/скрин страницы.]");
+          parts.push("[PDF: не удалось извлечь текст (похоже на скан без текстового слоя). Загрузите фото/скрин.]");
         }
       } else {
         res.status(400).json({ error: "Unsupported file type" });
@@ -88,7 +86,7 @@ export default async function handler(req, res) {
       }
     }
 
-    // 3) Перевод plain-текста (если был)
+    // 3) Перевод «сырого» текста (если был)
     if (text && text.trim()) {
       const completion = await openai.chat.completions.create({
         model: "gpt-4o-mini",
