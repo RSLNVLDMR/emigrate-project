@@ -26,7 +26,7 @@
 <div class="screen">
   <div class="container">
     <div class="header">
-      <div class="h1">Подтверждение адреса</div>
+      <div class="h1">Подтвердzenie адреса</div>
       <div class="lang">
         <button data-lang="ru" class="active">RU</button>
         <button data-lang="ua">UA</button>
@@ -36,14 +36,14 @@
 
     <div class="card">
       <div class="h2">Зачем нужен документ</div>
-      <p class="p">Подтверждение адреса требуется для карты побыту, банковского счёта, в ZUS/Urząd Skarbowy и др. Подойдут: мелдунек (zaświadczenie o zameldowaniu), договор аренды, акт приема-передачи/проживания, документы собственника с заявлением о проживании и т.п.</p>
+      <p class="p">Подтверждение адреса требуется для карты побыту, банковского счёта, в ZUS/Urząd Skarbowy и др. Подойдут: мелдунек (zaświadczenie o zameldowaniu), договор аренды, акт приема-передачи/проживания, документы собственника с заявлением и т.п.</p>
     </div>
 
     <details open style="margin-top:12px">
       <summary>Как оформить</summary>
       <div class="col" style="margin-top:8px">
         <div class="item"><div class="badge">Скоро</div><div>Умова найму (обычная) — сюда добавим пошаговую инструкцию.</div></div>
-        <div class="item"><div class="badge">Скоро</div><div>Умова найму okazjonalna — отдельные нюансы: нотариальное заявление, указание адреса «на wypadek» и пр.</div></div>
+        <div class="item"><div class="badge">Скоро</div><div>Умова найму okazjonalna — отдельные нюансы: нотариальное заявление, адрес «na wypadek» и пр.</div></div>
         <div class="item"><div class="badge">Скоро</div><div>Мелдунек — где и как получить в gmina/UM, какие данные должны стоять на справке.</div></div>
         <div class="item"><div class="badge">Скоро</div><div>Вы — собственник жилья (księga wieczysta/акт) — как подготовить подтверждение для ужонда/банка.</div></div>
         <small class="muted">Мы подставим точные тексты и нюансы для каждого сценария после анкеты. Пока — плейсхолдер.</small>
@@ -115,24 +115,27 @@
 <script>
 (function(){
   const $=(s,r=document)=>r.querySelector(s);
-  const humanSize=b=>{const mb=b/1024/1024; return mb>=1?mb.toFixed(2)+' MB':(b/1024).toFixed(0)+' KB';};
   const MAX_MB=10;
-  let file=null, previewUrl=null, cardEl=null;
 
   const tg=window.Telegram?.WebApp; if(tg){tg.expand(); tg.ready();}
 
+  let selectedFile=null, previewUrl=null, cardEl=null;
+  let busy=false;
+
+  function humanSize(b){const mb=b/1024/1024; return mb>=1?mb.toFixed(2)+' MB':(b/1024).toFixed(0)+' KB';}
   function setStatus(type,text){
-    $('#statusText').textContent=text;
-    const d=$('#statusDot'); d.classList.remove('ok','err');
-    if(type==='ok') d.classList.add('ok');
-    else if(type==='err') d.classList.add('err');
+    $('#statusText').textContent=text||'';
+    const d=$('#statusDot'); d.className='dot';
+    if(type==='ok') d.classList.add('ok'); else if(type==='err') d.classList.add('err');
   }
 
   function clearPreview(){
     if(cardEl){cardEl.remove();cardEl=null;}
     if(previewUrl){URL.revokeObjectURL(previewUrl);previewUrl=null;}
-    file=null; $('#file').value='';
+    selectedFile=null;
+    const inp=$('#file'); if(inp) inp.value='';
   }
+
   function makePreview(f){
     clearPreview();
     const card=document.createElement('div'); card.className='filecard';
@@ -140,40 +143,29 @@
     const col=document.createElement('div'); col.className='col'; col.style.flex='1';
     const name=document.createElement('div'); name.className='p'; name.textContent=f.name;
     const meta=document.createElement('small'); meta.className='muted'; meta.textContent=(f.type||'binary')+' · '+humanSize(f.size);
-    const del=document.createElement('button'); del.className='xbtn'; del.textContent='Удалить'; del.onclick=clearPreview;
+    const del=document.createElement('button'); del.className='xbtn'; del.textContent='Удалить'; del.onclick=()=>{ clearPreview(); setStatus(null,'Файл удалён'); };
     if(f.type.startsWith('image/')){ previewUrl=URL.createObjectURL(f); thumb.innerHTML=`<img src="${previewUrl}" alt="preview" style="width:100%;height:100%;object-fit:cover;border-radius:6px">`; } else { thumb.textContent='PDF'; }
     col.appendChild(name); col.appendChild(meta); card.appendChild(thumb); card.appendChild(col); card.appendChild(del);
     $('#preview').appendChild(card); cardEl=card;
   }
+
+  // универсальный геттер файла (из памяти или прямо из input)
+  function currentFile(){
+    if (selectedFile) return selectedFile;
+    const inp=$('#file');
+    if (inp && inp.files && inp.files[0]) return inp.files[0];
+    return null;
+  }
+
+  // bind upload
   $('#pick').onclick=()=>$('#file').click();
   $('#file').addEventListener('change',e=>{
     const f=e.target.files?.[0]; if(!f) return;
-    if(!(f.type.startsWith('image/') || f.type==='application/pdf')) return alert('Поддерживаем только фото и PDF');
-    if(f.size>MAX_MB*1024*1024) return alert('Файл больше '+MAX_MB+' МБ');
-    file=f; makePreview(f); setStatus(null,'Файл загружен — можно запускать проверку');
+    const ok=f.type.startsWith('image/') || f.type==='application/pdf';
+    if(!ok){ alert('Поддерживаем только фото и PDF'); return; }
+    if(f.size>MAX_MB*1024*1024){ alert('Файл больше '+MAX_MB+' МБ'); return; }
+    selectedFile=f; makePreview(f); setStatus(null,'Файл загружен — можно запускать проверку');
   });
-
-  async function verify(){
-    if(!file) return alert('Сначала загрузите файл');
-    setStatus(null,'Проверяем…');
-    $('#resultBox').classList.remove('show');
-    const fd=new FormData();
-    fd.append('file',file,file.name);
-    fd.append('docType',$('#docType').value);
-    try{
-      const res=await fetch('/api/verify-address',{method:'POST',body:fd});
-      const data=await res.json();
-      if(!res.ok) throw new Error(data.error||'Ошибка сервера');
-      renderResult(data);
-      setStatus(data.verdict==='pass'?'ok':(data.verdict==='fail'?'err':null),
-               data.verdict==='pass'?'Проверка пройдена':(data.verdict==='fail'?'Есть ошибки':'Неопределённо'));
-      // TODO: сюда же дернём уведомление в бота
-    }catch(e){
-      console.error(e);
-      setStatus('err','Не удалось проверить документ');
-      alert('Ошибка: '+e.message);
-    }
-  }
 
   function renderResult(data){
     const verdict=$('#verdict'); const errBlock=$('#blockErrors'); const recBlock=$('#blockRecos');
@@ -192,6 +184,41 @@
 
     $('#fields').textContent = JSON.stringify(data.fieldsExtracted||{}, null, 2);
     $('#resultBox').classList.add('show');
+  }
+
+  async function verify(){
+    if(busy) return;
+    const f = currentFile();
+    if(!f){ alert('Сначала загрузите файл'); return; }
+
+    const fromSel = $('#docType').value;
+    setStatus(null,'Проверяем…');
+    $('#resultBox').classList.remove('show');
+
+    busy=true;
+    $('#run').setAttribute('disabled','disabled');
+
+    try{
+      const fd=new FormData();
+      fd.append('docType', fromSel);
+      fd.append('file', f, f.name);
+
+      const res=await fetch('/api/verify-address',{method:'POST',body:fd});
+      const data=await res.json().catch(()=>({}));
+      if(!res.ok) throw new Error(data.error||'Ошибка сервера');
+
+      renderResult(data);
+      setStatus(data.verdict==='pass'?'ok':(data.verdict==='fail'?'err':null),
+                data.verdict==='pass'?'Проверка пройдена':(data.verdict==='fail'?'Есть ошибки':'Неопределённо'));
+      // TODO: пуш-уведомление в бота
+    }catch(e){
+      console.error(e);
+      setStatus('err','Не удалось проверить документ');
+      alert('Ошибка: '+(e.message||''));
+    }finally{
+      busy=false;
+      $('#run').removeAttribute('disabled');
+    }
   }
 
   $('#run').onclick=verify;
