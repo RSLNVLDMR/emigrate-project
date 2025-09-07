@@ -1,0 +1,165 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8" />
+  <title>Формуляр на карту побыту — eMigrant</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <script src="https://telegram.org/js/telegram-web-app.js"></script>
+  <link rel="stylesheet" href="./styles.css" />
+</head>
+<body>
+<div class="screen">
+  <div class="container">
+    <div class="header">
+      <div class="h1" data-i18n="formular_title">Формуляр на карту побыту</div>
+      <div class="lang">
+        <button data-lang="ru" class="active">RU</button>
+        <button data-lang="ua">UA</button>
+        <button data-lang="by">BY</button>
+      </div>
+    </div>
+
+    <!-- Описание формуляра -->
+    <div class="card">
+      <div class="h2" data-i18n="formular_description">Официальный формуляр</div>
+      <div class="p muted" data-i18n="formular_description_text">
+        Скачайте официальный формуляр для подачи заявления на карту побыту. 
+        Этот документ используется во всех воеводствах Польши.
+      </div>
+      
+    </div>
+
+    <!-- Кнопки действий -->
+    <div class="card" style="margin-top:12px">
+      <div class="h2" data-i18n="formular_actions">Действия</div>
+      
+      <div class="col" style="gap:12px; margin-top:12px">
+        <button id="downloadBtn" class="btn full" data-i18n="formular_download">
+          📥 Скачать формуляр
+        </button>
+        
+        <button id="shareBtn" class="btn secondary full" data-i18n="formular_share">
+          📤 Поделиться файлом
+        </button>
+      </div>
+    </div>
+
+    <!-- Инструкции по заполнению -->
+    <div class="card" style="margin-top:12px">
+      <div class="h2" data-i18n="formular_instructions">Инструкции по заполнению</div>
+      <ul class="p muted" style="margin-top:8px">
+        <li data-i18n="formular_instruction_1">Заполняйте формуляр печатными буквами</li>
+        <li data-i18n="formular_instruction_2">Используйте черную или синюю ручку</li>
+        <li data-i18n="formular_instruction_3">Не оставляйте пустых полей (ставьте прочерк, если не применимо)</li>
+        <li data-i18n="formular_instruction_4">Приложите все необходимые документы</li>
+        <li data-i18n="formular_instruction_5">Проверьте правильность всех данных перед подачей</li>
+      </ul>
+    </div>
+
+
+  </div>
+
+  <div class="tabs">
+    <a class="tab" href="./translator.html" data-i18n="nav_translator">Переводчик</a>
+    <a class="tab" href="./checklist.html" data-i18n="nav_checklist">Чеклист</a>
+    <a class="tab" href="./consultant.html" data-i18n="nav_consultant">Консультант</a>
+  </div>
+</div>
+
+<script>
+(function(){
+  const $ = (s,r=document)=>r.querySelector(s);
+  const $$ = (s,r=document)=>Array.from(r.querySelectorAll(s));
+  const storage = { get(k,d=null){try{return JSON.parse(localStorage.getItem(k))??d}catch{return d}}, set(k,v){localStorage.setItem(k,JSON.stringify(v))} };
+
+  // i18n
+  const i18n = {
+    lang: storage.get('lang','ru'),
+    dict:{},
+    async load(lang){
+      const use = lang || i18n.lang;
+      try{
+        const res = await fetch(`./i18n/${use}.json`, {cache:'no-store'});
+        if(res.ok){ i18n.dict = await res.json(); i18n.lang = use; storage.set('lang',use); }
+      }catch(e){}
+      applyTexts(); highlightLang();
+    }
+  };
+  const t = (k)=> i18n.dict[k] || k;
+  function applyTexts(){ $$('[data-i18n]').forEach(el=>{ const key=el.getAttribute('data-i18n'); if(i18n.dict[key]) el.textContent=i18n.dict[key]; }); document.documentElement.setAttribute('lang', i18n.lang); }
+  function highlightLang(){ $$('.lang button').forEach(b=> b.classList.toggle('active', b.dataset.lang===i18n.lang)); }
+  function bindLang(){ $$('.lang button').forEach(b=> b.onclick = ()=> i18n.load(b.dataset.lang)); }
+
+  // Скачивание файла
+  function downloadFormular() {
+    const link = document.createElement('a');
+    link.href = './files/formular-karta-pobytu.pdf';
+    link.download = 'formular-karta-pobytu.pdf';
+    link.target = '_blank';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  }
+
+  // Поделиться файлом
+  async function shareFormular() {
+    const fileUrl = window.location.origin + '/files/formular-karta-pobytu.pdf';
+    
+    if (navigator.share) {
+      try {
+        await navigator.share({
+          title: 'Формуляр на карту побыту',
+          text: 'Официальный формуляр для подачи заявления на карту побыту в Польше',
+          url: fileUrl
+        });
+      } catch (err) {
+        console.log('Ошибка при использовании Web Share API:', err);
+        fallbackShare(fileUrl);
+      }
+    } else {
+      fallbackShare(fileUrl);
+    }
+  }
+
+  // Fallback для поделиться
+  function fallbackShare(fileUrl) {
+    if (navigator.clipboard) {
+      navigator.clipboard.writeText(fileUrl).then(() => {
+        alert('Ссылка на файл скопирована в буфер обмена!');
+      }).catch(() => {
+        promptShare(fileUrl);
+      });
+    } else {
+      promptShare(fileUrl);
+    }
+  }
+
+  // Показать ссылку для копирования
+  function promptShare(fileUrl) {
+    const link = prompt('Скопируйте эту ссылку для отправки файла:', fileUrl);
+    if (link) {
+      // Пользователь может скопировать ссылку
+    }
+  }
+
+  // Обработчики событий
+  function bindEvents() {
+    $('#downloadBtn').onclick = downloadFormular;
+    $('#shareBtn').onclick = shareFormular;
+  }
+
+  function initTG(){ const tg = window.Telegram && window.Telegram.WebApp; if(!tg) return; tg.expand(); tg.ready(); }
+
+  async function boot(){
+    initTG();
+    bindLang();
+    bindEvents();
+    await i18n.load(storage.get('lang','ru'));
+  }
+
+  document.addEventListener('DOMContentLoaded', boot);
+  window.addEventListener('pageshow', boot);
+})();
+</script>
+</body>
+</html>

@@ -83,18 +83,21 @@
   };
   const CHECKLIST_TEMPLATES = {
     pobyt_study: [
+      {slug:'formular', i18n:'item.formular'},
       {slug:'student-zaswiadczenie', i18n:'item.student_zaswiadczenie'},
       {slug:'photos', i18n:'item.photos'},
       {slug:'photo-fee-wniosek', i18n:'item.photo_fee_wniosek'},
       {slug:'visit-biometrics', i18n:'item.visit_biometrics'}
     ],
     regularize: [
+      {slug:'formular', i18n:'item.formular'},
       {slug:'choose-basis', i18n:'item.choose_basis'},
       {slug:'photos', i18n:'item.photos'},
       {slug:'collect-docs', i18n:'item.collect_docs'},
       {slug:'submit-pobyt', i18n:'item.submit_pobyt'}
     ],
     pesel_support: [
+      {slug:'formular', i18n:'item.formular'},
       {slug:'pesel-rights', i18n:'item.pesel_rights'},
       {slug:'work-insurance', i18n:'item.work_insurance'},
       {slug:'address', i18n:'item.address'},
@@ -105,6 +108,7 @@
       {slug:'parallel-options', i18n:'item.parallel_options'}
     ],
     pobyt_support: [
+      {slug:'formular', i18n:'item.formular'},
       {slug:'obligations', i18n:'item.obligations'},
       {slug:'employer-change', i18n:'item.employer_change'},
       {slug:'photos', i18n:'item.photos'}
@@ -115,6 +119,7 @@
     if(slug==='choose-basis') return './module-no-status-basis.html';
     if(slug==='address') return './module-address.html';
     if(slug==='photos') return './module-photos.html'; // ⬅️ модуль фотографий
+    if(slug==='formular') return './module-formular.html'; // ⬅️ модуль формуляра
     return '#todo';
   }
   function computeProgress(items){ const done = items.filter(x=>x.done).length; return Math.round((done / Math.max(items.length,1)) * 100); }
