@@ -1,0 +1,160 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title data-i18n="supplement1_title">Дополнение №1 - Карта побыту по работе</title>
+  <link rel="stylesheet" href="./styles.css">
+  <script src="https://telegram.org/js/telegram-web-app.js"></script>
+</head>
+<body>
+  <div class="container">
+    <div class="header">
+      <h1 data-i18n="supplement1_title">Дополнение №1 - Карта побыту по работе</h1>
+    </div>
+
+    <!-- Описание дополнения -->
+    <div class="card">
+      <div class="h2" data-i18n="supplement1_description">Описание дополнения</div>
+      <div class="p" data-i18n="supplement1_description_text">
+        Дополнение №1 к заявлению на карту побыту для лиц, работающих по трудовому договору. 
+        Данный документ необходимо заполнить и приложить к основному заявлению при подаче документов на карту побыту по работе.
+      </div>
+    </div>
+
+    <!-- Кнопки действий -->
+    <div class="card">
+      <div class="h2" data-i18n="supplement1_actions">Действия</div>
+      <div class="button-group">
+        <button class="btn btn-primary" onclick="downloadSupplement1()" data-i18n="supplement1_download">
+          Скачать дополнение №1
+        </button>
+        <button class="btn btn-secondary" onclick="shareSupplement1()" data-i18n="supplement1_share">
+          Поделиться
+        </button>
+      </div>
+    </div>
+
+    <!-- Инструкции по заполнению -->
+    <div class="card">
+      <div class="h2" data-i18n="supplement1_instructions">Инструкции по заполнению</div>
+      <ul class="list">
+        <li data-i18n="supplement1_instruction_1">Заполните все обязательные поля</li>
+        <li data-i18n="supplement1_instruction_2">Укажите точные данные о работодателе</li>
+        <li data-i18n="supplement1_instruction_3">Приложите копию трудового договора</li>
+        <li data-i18n="supplement1_instruction_4">Проверьте правильность всех данных</li>
+        <li data-i18n="supplement1_instruction_5">Подпишите документ</li>
+      </ul>
+    </div>
+
+  </div>
+
+  <div class="tabs">
+    <a class="tab" href="./translator.html" data-i18n="nav_translator">Переводчик</a>
+    <a class="tab" href="./checklist.html" data-i18n="nav_checklist">Чеклист</a>
+    <a class="tab" href="./consultant.html" data-i18n="nav_consultant">Консультант</a>
+  </div>
+
+  <script src="./utils.js"></script>
+  <script>
+    (function() {
+      // Инициализация Telegram Web App
+      if (window.Telegram && window.Telegram.WebApp) {
+        const tg = window.Telegram.WebApp;
+        tg.expand();
+        tg.ready();
+      }
+
+      // Загрузка переводов
+      if (typeof loadTranslations === 'function') {
+        loadTranslations();
+      }
+
+      // Функция скачивания дополнения №1
+      window.downloadSupplement1 = function() {
+        console.log('Скачивание дополнения №1...');
+        const link = document.createElement('a');
+        link.href = './files/dopolnienie-nr1-karta-pobytu-praca.pdf';
+        link.download = 'dopolnienie-nr1-karta-pobytu-praca.pdf';
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+      };
+
+      // Функция поделиться дополнением №1
+      window.shareSupplement1 = function() {
+        console.log('Поделиться дополнением №1...');
+        const fileUrl = window.location.origin + '/files/dopolnienie-nr1-karta-pobytu-praca.pdf';
+        
+        if (navigator.share) {
+          navigator.share({
+            title: 'Дополнение №1 - Карта побыту по работе',
+            text: 'Дополнение №1 к заявлению на карту побыту для лиц, работающих по трудовому договору',
+            url: fileUrl
+          }).catch(err => console.log('Ошибка при попытке поделиться:', err));
+        } else {
+          // Fallback для браузеров без поддержки Web Share API
+          if (navigator.clipboard) {
+            navigator.clipboard.writeText(fileUrl).then(() => {
+              alert('Ссылка скопирована в буфер обмена');
+            }).catch(err => {
+              console.log('Ошибка копирования:', err);
+              // Показываем ссылку в модальном окне
+              showShareModal(fileUrl);
+            });
+          } else {
+            showShareModal(fileUrl);
+          }
+        }
+      };
+
+      // Показать модальное окно с ссылкой для поделиться
+      function showShareModal(url) {
+        const modal = document.createElement('div');
+        modal.style.cssText = `
+          position: fixed;
+          top: 0;
+          left: 0;
+          width: 100%;
+          height: 100%;
+          background: rgba(0,0,0,0.5);
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          z-index: 1000;
+        `;
+        
+        const content = document.createElement('div');
+        content.style.cssText = `
+          background: white;
+          padding: 20px;
+          border-radius: 8px;
+          max-width: 90%;
+          word-break: break-all;
+        `;
+        
+        content.innerHTML = `
+          <h3>Поделиться ссылкой</h3>
+          <p>Скопируйте ссылку:</p>
+          <input type="text" value="${url}" readonly style="width: 100%; padding: 8px; margin: 10px 0;">
+          <button onclick="this.closest('.modal').remove()" style="padding: 8px 16px;">Закрыть</button>
+        `;
+        
+        modal.className = 'modal';
+        modal.appendChild(content);
+        document.body.appendChild(modal);
+        
+        // Автоматически выделить текст в input
+        const input = content.querySelector('input');
+        input.select();
+      }
+
+      // Проверяем, что функции определены
+      console.log('Функции определены:', {
+        downloadSupplement1: typeof window.downloadSupplement1,
+        shareSupplement1: typeof window.shareSupplement1
+      });
+    })();
+  </script>
+</body>
+</html>

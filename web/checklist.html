@@ -98,6 +98,7 @@
     ],
     pesel_support: [
       {slug:'formular', i18n:'item.formular'},
+      {slug:'supplement1', i18n:'item.supplement1'},
       {slug:'pesel-rights', i18n:'item.pesel_rights'},
       {slug:'work-insurance', i18n:'item.work_insurance'},
       {slug:'address', i18n:'item.address'},
@@ -109,6 +110,7 @@
     ],
     pobyt_support: [
       {slug:'formular', i18n:'item.formular'},
+      {slug:'supplement1', i18n:'item.supplement1'},
       {slug:'obligations', i18n:'item.obligations'},
       {slug:'employer-change', i18n:'item.employer_change'},
       {slug:'photos', i18n:'item.photos'}
@@ -120,6 +122,7 @@
     if(slug==='address') return './module-address.html';
     if(slug==='photos') return './module-photos.html'; // ⬅️ модуль фотографий
     if(slug==='formular') return './module-formular.html'; // ⬅️ модуль формуляра
+    if(slug==='supplement1') return './module-supplement1.html'; // ⬅️ модуль дополнения №1
     return '#todo';
   }
   function computeProgress(items){ const done = items.filter(x=>x.done).length; return Math.round((done / Math.max(items.length,1)) * 100); }
