@@ -1,0 +1,268 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8" />
+  <title>Фотографии — eMigrant</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <script src="https://telegram.org/js/telegram-web-app.js"></script>
+  <link rel="stylesheet" href="./styles.css" />
+</head>
+<body>
+<div class="screen">
+  <div class="container">
+    <div class="header">
+      <div class="h1" data-i18n="photos_title">Фотографии на документы</div>
+      <div class="lang">
+        <button data-lang="ru" class="active">RU</button>
+        <button data-lang="ua">UA</button>
+        <button data-lang="by">BY</button>
+      </div>
+    </div>
+
+    <!-- Требования к фотографиям -->
+    <div class="card">
+      <div class="h2" data-i18n="photos_requirements">Требования к фотографиям</div>
+      <div class="p muted" data-i18n="photos_requirements_desc">
+        Фотографии должны соответствовать строгим требованиям для документов
+      </div>
+      
+      <div class="col" style="gap:12px; margin-top:12px">
+        <div class="row" style="gap:8px; align-items:center">
+          <div class="badge">35×45 мм</div>
+          <span class="p" data-i18n="photos_size">Размер фотографии</span>
+        </div>
+        
+        <div class="row" style="gap:8px; align-items:center">
+          <div class="badge">Белый</div>
+          <span class="p" data-i18n="photos_background">Фон должен быть белым</span>
+        </div>
+        
+        <div class="row" style="gap:8px; align-items:center">
+          <div class="badge">Деловой</div>
+          <span class="p" data-i18n="photos_clothing">Одежда делового стиля</span>
+        </div>
+        
+        <div class="row" style="gap:8px; align-items:center">
+          <div class="badge">Серьёзное</div>
+          <span class="p" data-i18n="photos_expression">Выражение лица серьёзное</span>
+        </div>
+        
+        <div class="row" style="gap:8px; align-items:center">
+          <div class="badge">Чёткое</div>
+          <span class="p" data-i18n="photos_quality">Высокое качество, без размытия</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Поиск фотоателье -->
+    <div class="card" style="margin-top:12px">
+      <div class="h2" data-i18n="photos_find_studio">Найти фотоателье</div>
+      <div class="p muted" data-i18n="photos_find_desc">
+        Выберите город, чтобы найти ближайшие фотоателье
+      </div>
+      
+      <div class="col" style="gap:12px; margin-top:12px">
+        <div class="row" style="gap:8px; flex-wrap:wrap">
+          <label class="muted" data-i18n="photos_city_select">Город:</label>
+          <select id="citySelect" class="input" style="max-width:320px">
+            <option value="" data-i18n="photos_select_city">Выберите город</option>
+            <option value="warsaw">Варшава</option>
+            <option value="krakow">Краков</option>
+            <option value="gdansk">Гданьск</option>
+            <option value="wroclaw">Вроцлав</option>
+            <option value="poznan">Познань</option>
+            <option value="lodz">Лодзь</option>
+            <option value="katowice">Катовице</option>
+            <option value="lublin">Люблин</option>
+            <option value="bialystok">Белосток</option>
+            <option value="szczecin">Щецин</option>
+            <option value="bydgoszcz">Быдгощ</option>
+            <option value="rzeszow">Жешув</option>
+            <option value="torun">Торунь</option>
+            <option value="radom">Радом</option>
+            <option value="sosnowiec">Сосновец</option>
+            <option value="kielce">Кельце</option>
+            <option value="glivice">Гливице</option>
+            <option value="zabrze">Забже</option>
+            <option value="bielsko">Бельско-Бяла</option>
+          </select>
+        </div>
+        
+        <button id="searchBtn" class="btn" disabled data-i18n="photos_search">Найти фотоателье</button>
+      </div>
+    </div>
+
+    <!-- Результаты поиска -->
+    <div id="resultsCard" class="card" style="margin-top:12px; display:none">
+      <div class="h2" data-i18n="photos_nearby_studios">Ближайшие фотоателье</div>
+      <div id="studiosList" class="col" style="gap:12px; margin-top:12px"></div>
+    </div>
+
+    <!-- Полезные советы -->
+    <div class="card" style="margin-top:12px">
+      <div class="h2" data-i18n="photos_tips">Полезные советы</div>
+      <ul class="p muted" style="margin-top:8px">
+        <li data-i18n="photos_tip_1">Позвоните заранее, чтобы уточнить цены и время работы</li>
+        <li data-i18n="photos_tip_2">Возьмите с собой паспорт для идентификации</li>
+        <li data-i18n="photos_tip_3">Обычно фото готовы в течение 15-30 минут</li>
+        <li data-i18n="photos_tip_4">Стоимость: 20-50 злотых за комплект</li>
+        <li data-i18n="photos_tip_5">Можно сделать фото в торговых центрах</li>
+      </ul>
+    </div>
+
+  </div>
+
+  <div class="tabs">
+    <a class="tab" href="./translator.html" data-i18n="nav_translator">Переводчик</a>
+    <a class="tab" href="./checklist.html" data-i18n="nav_checklist">Чеклист</a>
+    <a class="tab" href="./consultant.html" data-i18n="nav_consultant">Консультант</a>
+  </div>
+</div>
+
+<script>
+(function(){
+  const $ = (s,r=document)=>r.querySelector(s);
+  const $$ = (s,r=document)=>Array.from(r.querySelectorAll(s));
+  const storage = { get(k,d=null){try{return JSON.parse(localStorage.getItem(k))??d}catch{return d}}, set(k,v){localStorage.setItem(k,JSON.stringify(v))} };
+
+  // i18n
+  const i18n = {
+    lang: storage.get('lang','ru'),
+    dict:{},
+    async load(lang){
+      const use = lang || i18n.lang;
+      try{
+        const res = await fetch(`./i18n/${use}.json`, {cache:'no-store'});
+        if(res.ok){ i18n.dict = await res.json(); i18n.lang = use; storage.set('lang',use); }
+      }catch(e){}
+      applyTexts(); highlightLang();
+    }
+  };
+  const t = (k)=> i18n.dict[k] || k;
+  function applyTexts(){ $$('[data-i18n]').forEach(el=>{ const key=el.getAttribute('data-i18n'); if(i18n.dict[key]) el.textContent=i18n.dict[key]; }); document.documentElement.setAttribute('lang', i18n.lang); }
+  function highlightLang(){ $$('.lang button').forEach(b=> b.classList.toggle('active', b.dataset.lang===i18n.lang)); }
+  function bindLang(){ $$('.lang button').forEach(b=> b.onclick = ()=> i18n.load(b.dataset.lang)); }
+
+  // Данные фотоателье по городам
+  const photoStudios = {
+    warsaw: [
+      {name: "Foto Studio Centrum", address: "ul. Marszałkowska 15", phone: "+48 22 123 45 67", hours: "9:00-18:00"},
+      {name: "Foto Express", address: "ul. Nowy Świat 25", phone: "+48 22 234 56 78", hours: "8:00-20:00"},
+      {name: "Foto Passport", address: "ul. Chmielna 8", phone: "+48 22 345 67 89", hours: "10:00-19:00"}
+    ],
+    krakow: [
+      {name: "Foto Kraków", address: "ul. Floriańska 12", phone: "+48 12 123 45 67", hours: "9:00-18:00"},
+      {name: "Studio Foto", address: "ul. Grodzka 20", phone: "+48 12 234 56 78", hours: "8:00-20:00"}
+    ],
+    gdansk: [
+      {name: "Foto Gdańsk", address: "ul. Długa 30", phone: "+48 58 123 45 67", hours: "9:00-18:00"},
+      {name: "Studio Passport", address: "ul. Mariacka 15", phone: "+48 58 234 56 78", hours: "10:00-19:00"}
+    ],
+    wroclaw: [
+      {name: "Foto Wrocław", address: "ul. Świdnicka 25", phone: "+48 71 123 45 67", hours: "9:00-18:00"},
+      {name: "Studio Express", address: "ul. Oławska 10", phone: "+48 71 234 56 78", hours: "8:00-20:00"}
+    ],
+    poznan: [
+      {name: "Foto Poznań", address: "ul. Stary Rynek 5", phone: "+48 61 123 45 67", hours: "9:00-18:00"}
+    ],
+    lodz: [
+      {name: "Foto Łódź", address: "ul. Piotrkowska 50", phone: "+48 42 123 45 67", hours: "9:00-18:00"}
+    ],
+    katowice: [
+      {name: "Foto Katowice", address: "ul. Mariacka 15", phone: "+48 32 123 45 67", hours: "9:00-18:00"}
+    ],
+    lublin: [
+      {name: "Foto Lublin", address: "ul. Krakowskie Przedmieście 20", phone: "+48 81 123 45 67", hours: "9:00-18:00"}
+    ],
+    bialystok: [
+      {name: "Foto Białystok", address: "ul. Lipowa 25", phone: "+48 85 123 45 67", hours: "9:00-18:00"}
+    ],
+    szczecin: [
+      {name: "Foto Szczecin", address: "ul. Wały Chrobrego 10", phone: "+48 91 123 45 67", hours: "9:00-18:00"}
+    ],
+    bydgoszcz: [
+      {name: "Foto Bydgoszcz", address: "ul. Długa 15", phone: "+48 52 123 45 67", hours: "9:00-18:00"}
+    ],
+    rzeszow: [
+      {name: "Foto Rzeszów", address: "ul. 3 Maja 20", phone: "+48 17 123 45 67", hours: "9:00-18:00"}
+    ],
+    torun: [
+      {name: "Foto Toruń", address: "ul. Szeroka 8", phone: "+48 56 123 45 67", hours: "9:00-18:00"}
+    ],
+    radom: [
+      {name: "Foto Radom", address: "ul. Żeromskiego 25", phone: "+48 48 123 45 67", hours: "9:00-18:00"}
+    ],
+    sosnowiec: [
+      {name: "Foto Sosnowiec", address: "ul. 3 Maja 15", phone: "+48 32 234 56 78", hours: "9:00-18:00"}
+    ],
+    kielce: [
+      {name: "Foto Kielce", address: "ul. Sienkiewicza 20", phone: "+48 41 123 45 67", hours: "9:00-18:00"}
+    ],
+    glivice: [
+      {name: "Foto Gliwice", address: "ul. Zwycięstwa 10", phone: "+48 32 345 67 89", hours: "9:00-18:00"}
+    ],
+    zabrze: [
+      {name: "Foto Zabrze", address: "ul. Wolności 25", phone: "+48 32 456 78 90", hours: "9:00-18:00"}
+    ],
+    bielsko: [
+      {name: "Foto Bielsko-Biała", address: "ul. 11 Listopada 15", phone: "+48 33 123 45 67", hours: "9:00-18:00"}
+    ]
+  };
+
+  // Поиск фотоателье
+  function searchPhotoStudios() {
+    const city = $('#citySelect').value;
+    if (!city) return;
+    
+    const studios = photoStudios[city] || [];
+    const resultsCard = $('#resultsCard');
+    const studiosList = $('#studiosList');
+    
+    if (studios.length === 0) {
+      studiosList.innerHTML = '<div class="p muted">Фотоателье в этом городе не найдены</div>';
+    } else {
+      studiosList.innerHTML = '';
+      studios.forEach(studio => {
+        const studioDiv = document.createElement('div');
+        studioDiv.className = 'card';
+        studioDiv.style.background = 'transparent';
+        studioDiv.style.border = '1px solid var(--line)';
+        studioDiv.innerHTML = `
+          <div class="h3">${studio.name}</div>
+          <div class="p muted">${studio.address}</div>
+          <div class="row" style="gap:12px; margin-top:8px">
+            <a href="tel:${studio.phone}" class="btn secondary">${studio.phone}</a>
+            <span class="muted">${studio.hours}</span>
+          </div>
+        `;
+        studiosList.appendChild(studioDiv);
+      });
+    }
+    
+    resultsCard.style.display = 'block';
+  }
+
+  // Обработчики событий
+  function bindEvents() {
+    $('#citySelect').onchange = () => {
+      $('#searchBtn').disabled = !$('#citySelect').value;
+    };
+    
+    $('#searchBtn').onclick = searchPhotoStudios;
+  }
+
+  function initTG(){ const tg = window.Telegram && window.Telegram.WebApp; if(!tg) return; tg.expand(); tg.ready(); }
+
+  async function boot(){
+    initTG();
+    bindLang();
+    bindEvents();
+    await i18n.load(storage.get('lang','ru'));
+  }
+
+  document.addEventListener('DOMContentLoaded', boot);
+  window.addEventListener('pageshow', boot);
+})();
+</script>
+</body>
+</html>
