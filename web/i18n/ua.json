@@ -134,6 +134,7 @@
 
   "item.formular": "Формуляр на карту побуту",
   "item.supplement1": "Доповнення №1 - Карта побуту за роботою",
+  "item.payment": "Оплата за подачу на карту побуту",
 
   "formular_title": "Формуляр на карту побуту",
   "formular_description": "Офіційний формуляр",
@@ -165,5 +166,24 @@
   "supplement1_instruction_2": "Вкажіть точні дані про роботодавця",
   "supplement1_instruction_3": "Додайте копію трудового договору",
   "supplement1_instruction_4": "Перевірте правильність усіх даних",
-  "supplement1_instruction_5": "Підпишіть документ"
+  "supplement1_instruction_5": "Підпишіть документ",
+
+  "payment_title": "Оплата за подачу на карту побуту",
+  "payment_description": "Інформація про оплату",
+  "payment_description_text": "Для подачі заяви на карту побуту необхідно сплатити державне мито. Оберіть ваше воєводство, щоб отримати актуальні реквізити для оплати.",
+  "payment_amount": "Сума до оплати: 440 злотих",
+  "payment_voivodeship": "Оберіть воєводство",
+  "payment_select_voivodeship": "Оберіть воєводство",
+  "payment_details": "Реквізити для оплати",
+  "payment_recipient": "Отримувач:",
+  "payment_account": "Номер рахунку:",
+  "payment_description_field": "Опис платежу:",
+  "payment_amount_field": "Сума:",
+  "payment_click_to_copy": "Натисніть для копіювання",
+  "payment_instructions": "Інструкції з оплати",
+  "payment_instruction_1": "Сплатіть мито до подачі документів",
+  "payment_instruction_2": "Збережіть квитанцію про оплату",
+  "payment_instruction_3": "Додайте квитанцію до заяви",
+  "payment_instruction_4": "Перевірте правильність реквізитів",
+  "payment_instruction_5": "Оплата дійсна протягом 30 днів"
 }

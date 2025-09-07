@@ -1,0 +1,337 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title data-i18n="payment_title">Оплата за подачу на карту побыту</title>
+  <link rel="stylesheet" href="./styles.css">
+  <script src="https://telegram.org/js/telegram-web-app.js"></script>
+</head>
+<body>
+  <div class="container">
+    <div class="header">
+      <h1 data-i18n="payment_title">Оплата за подачу на карту побыту</h1>
+    </div>
+
+    <!-- Описание оплаты -->
+    <div class="card">
+      <div class="h2" data-i18n="payment_description">Информация об оплате</div>
+      <div class="p" data-i18n="payment_description_text">
+        Для подачи заявления на карту побыту необходимо оплатить государственную пошлину. 
+        Выберите ваше воеводство, чтобы получить актуальные реквизиты для оплаты.
+      </div>
+      <div class="p" style="margin-top: 12px; font-weight: bold; color: var(--primary);">
+        <span data-i18n="payment_amount">Сумма к оплате: 440 злотых</span>
+      </div>
+    </div>
+
+    <!-- Выбор воеводства -->
+    <div class="card">
+      <div class="h2" data-i18n="payment_voivodeship">Выберите воеводство</div>
+      <select id="voivodeshipSelect" class="input" onchange="updatePaymentData()">
+        <option value="" data-i18n="payment_select_voivodeship">Выберите воеводство</option>
+        <option value="dolnoslaskie">Dolnośląskie</option>
+        <option value="kujawsko-pomorskie">Kujawsko-Pomorskie</option>
+        <option value="lubelskie">Lubelskie</option>
+        <option value="lubuskie">Lubuskie</option>
+        <option value="lodzkie">Łódzkie</option>
+        <option value="malopolskie">Małopolskie</option>
+        <option value="mazowieckie">Mazowieckie</option>
+        <option value="opolskie">Opolskie</option>
+        <option value="podkarpackie">Podkarpackie</option>
+        <option value="podlaskie">Podlaskie</option>
+        <option value="pomorskie">Pomorskie</option>
+        <option value="slaskie">Śląskie</option>
+        <option value="swietokrzyskie">Świętokrzyskie</option>
+        <option value="warminsko-mazurskie">Warmińsko-Mazurskie</option>
+        <option value="wielkopolskie">Wielkopolskie</option>
+        <option value="zachodniopomorskie">Zachodniopomorskie</option>
+      </select>
+    </div>
+
+    <!-- Данные для оплаты -->
+    <div id="paymentData" class="card" style="display: none;">
+      <div class="h2" data-i18n="payment_details">Реквизиты для оплаты</div>
+      
+      <div class="payment-item">
+        <label data-i18n="payment_recipient">Получатель:</label>
+        <div class="payment-value" onclick="copyToClipboard(this)" data-copy="recipient">
+          <span id="recipientValue">—</span>
+          <span class="copy-hint" data-i18n="payment_click_to_copy">Нажмите для копирования</span>
+        </div>
+      </div>
+
+      <div class="payment-item">
+        <label data-i18n="payment_account">Номер счета:</label>
+        <div class="payment-value" onclick="copyToClipboard(this)" data-copy="account">
+          <span id="accountValue">—</span>
+          <span class="copy-hint" data-i18n="payment_click_to_copy">Нажмите для копирования</span>
+        </div>
+      </div>
+
+      <div class="payment-item">
+        <label data-i18n="payment_description_field">Описание платежа:</label>
+        <div class="payment-value" onclick="copyToClipboard(this)" data-copy="description">
+          <span id="descriptionValue">—</span>
+          <span class="copy-hint" data-i18n="payment_click_to_copy">Нажмите для копирования</span>
+        </div>
+      </div>
+
+      <div class="payment-item">
+        <label data-i18n="payment_amount_field">Сумма:</label>
+        <div class="payment-value" onclick="copyToClipboard(this)" data-copy="amount">
+          <span id="amountValue">440,00 zł</span>
+          <span class="copy-hint" data-i18n="payment_click_to_copy">Нажмите для копирования</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Инструкции -->
+    <div class="card">
+      <div class="h2" data-i18n="payment_instructions">Инструкции по оплате</div>
+      <ul class="list">
+        <li data-i18n="payment_instruction_1">Оплатите пошлину до подачи документов</li>
+        <li data-i18n="payment_instruction_2">Сохраните квитанцию об оплате</li>
+        <li data-i18n="payment_instruction_3">Приложите квитанцию к заявлению</li>
+        <li data-i18n="payment_instruction_4">Проверьте правильность реквизитов</li>
+        <li data-i18n="payment_instruction_5">Оплата действительна в течение 30 дней</li>
+      </ul>
+    </div>
+
+  </div>
+
+  <div class="tabs">
+    <a class="tab" href="./translator.html" data-i18n="nav_translator">Переводчик</a>
+    <a class="tab" href="./checklist.html" data-i18n="nav_checklist">Чеклист</a>
+    <a class="tab" href="./consultant.html" data-i18n="nav_consultant">Консультант</a>
+  </div>
+
+  <script src="./utils.js"></script>
+  <script>
+    (function() {
+      // Инициализация Telegram Web App
+      if (window.Telegram && window.Telegram.WebApp) {
+        const tg = window.Telegram.WebApp;
+        tg.expand();
+        tg.ready();
+      }
+
+      // Загрузка переводов
+      if (typeof loadTranslations === 'function') {
+        loadTranslations();
+      }
+
+      // Данные для оплаты по воеводствам
+      const paymentData = {
+        'dolnoslaskie': {
+          recipient: 'Urząd Wojewódzki we Wrocławiu',
+          account: 'PL 12 1020 5242 0000 2002 0000 0000',
+          description: 'Opłata za wniosek o zezwolenie na pobyt czasowy'
+        },
+        'kujawsko-pomorskie': {
+          recipient: 'Urząd Wojewódzki w Bydgoszczy',
+          account: 'PL 12 1020 5242 0000 2002 0000 0000',
+          description: 'Opłata za wniosek o zezwolenie na pobyt czasowy'
+        },
+        'lubelskie': {
+          recipient: 'Urząd Wojewódzki w Lublinie',
+          account: 'PL 12 1020 5242 0000 2002 0000 0000',
+          description: 'Opłata za wniosek o zezwolenie na pobyt czasowy'
+        },
+        'lubuskie': {
+          recipient: 'Urząd Wojewódzki w Gorzowie Wielkopolskim',
+          account: 'PL 12 1020 5242 0000 2002 0000 0000',
+          description: 'Opłata za wniosek o zezwolenie na pobyt czasowy'
+        },
+        'lodzkie': {
+          recipient: 'Urząd Wojewódzki w Łodzi',
+          account: 'PL 12 1020 5242 0000 2002 0000 0000',
+          description: 'Opłata za wniosek o zezwolenie na pobyt czasowy'
+        },
+        'malopolskie': {
+          recipient: 'Urząd Wojewódzki w Krakowie',
+          account: 'PL 12 1020 5242 0000 2002 0000 0000',
+          description: 'Opłata za wniosek o zezwolenie na pobyt czasowy'
+        },
+        'mazowieckie': {
+          recipient: 'Urząd Wojewódzki w Warszawie',
+          account: 'PL 12 1020 5242 0000 2002 0000 0000',
+          description: 'Opłata za wniosek o zezwolenie na pobyt czasowy'
+        },
+        'opolskie': {
+          recipient: 'Urząd Wojewódzki w Opolu',
+          account: 'PL 12 1020 5242 0000 2002 0000 0000',
+          description: 'Opłata za wniosek o zezwolenie na pobyt czasowy'
+        },
+        'podkarpackie': {
+          recipient: 'Urząd Wojewódzki w Rzeszowie',
+          account: 'PL 12 1020 5242 0000 2002 0000 0000',
+          description: 'Opłata za wniosek o zezwolenie na pobyt czasowy'
+        },
+        'podlaskie': {
+          recipient: 'Urząd Wojewódzki w Białymstoku',
+          account: 'PL 12 1020 5242 0000 2002 0000 0000',
+          description: 'Opłata za wniosek o zezwolenie na pobyt czasowy'
+        },
+        'pomorskie': {
+          recipient: 'Urząd Wojewódzki w Gdańsku',
+          account: 'PL 12 1020 5242 0000 2002 0000 0000',
+          description: 'Opłata za wniosek o zezwolenie na pobyt czasowy'
+        },
+        'slaskie': {
+          recipient: 'Urząd Wojewódzki w Katowicach',
+          account: 'PL 12 1020 5242 0000 2002 0000 0000',
+          description: 'Opłata za wniosek o zezwolenie na pobyt czasowy'
+        },
+        'swietokrzyskie': {
+          recipient: 'Urząd Wojewódzki w Kielcach',
+          account: 'PL 12 1020 5242 0000 2002 0000 0000',
+          description: 'Opłata za wniosek o zezwolenie na pobyt czasowy'
+        },
+        'warminsko-mazurskie': {
+          recipient: 'Urząd Wojewódzki w Olsztynie',
+          account: 'PL 12 1020 5242 0000 2002 0000 0000',
+          description: 'Opłata za wniosek o zezwolenie na pobyt czasowy'
+        },
+        'wielkopolskie': {
+          recipient: 'Urząd Wojewódzki w Poznaniu',
+          account: 'PL 12 1020 5242 0000 2002 0000 0000',
+          description: 'Opłata za wniosek o zezwolenie na pobyt czasowy'
+        },
+        'zachodniopomorskie': {
+          recipient: 'Urząd Wojewódzki w Szczecinie',
+          account: 'PL 12 1020 5242 0000 2002 0000 0000',
+          description: 'Opłata za wniosek o zezwolenie na pobyt czasowy'
+        }
+      };
+
+      // Функция обновления данных оплаты
+      window.updatePaymentData = function() {
+        const select = document.getElementById('voivodeshipSelect');
+        const paymentDataDiv = document.getElementById('paymentData');
+        const selectedVoivodeship = select.value;
+
+        if (selectedVoivodeship && paymentData[selectedVoivodeship]) {
+          const data = paymentData[selectedVoivodeship];
+          
+          document.getElementById('recipientValue').textContent = data.recipient;
+          document.getElementById('accountValue').textContent = data.account;
+          document.getElementById('descriptionValue').textContent = data.description;
+          
+          paymentDataDiv.style.display = 'block';
+        } else {
+          paymentDataDiv.style.display = 'none';
+        }
+      };
+
+      // Функция копирования в буфер обмена
+      window.copyToClipboard = function(element) {
+        const text = element.querySelector('span:first-child').textContent;
+        
+        if (navigator.clipboard) {
+          navigator.clipboard.writeText(text).then(() => {
+            showCopySuccess(element);
+          }).catch(err => {
+            console.log('Ошибка копирования:', err);
+            fallbackCopyTextToClipboard(text, element);
+          });
+        } else {
+          fallbackCopyTextToClipboard(text, element);
+        }
+      };
+
+      // Fallback для копирования
+      function fallbackCopyTextToClipboard(text, element) {
+        const textArea = document.createElement('textarea');
+        textArea.value = text;
+        textArea.style.position = 'fixed';
+        textArea.style.left = '-999999px';
+        textArea.style.top = '-999999px';
+        document.body.appendChild(textArea);
+        textArea.focus();
+        textArea.select();
+        
+        try {
+          document.execCommand('copy');
+          showCopySuccess(element);
+        } catch (err) {
+          console.log('Ошибка fallback копирования:', err);
+        }
+        
+        document.body.removeChild(textArea);
+      }
+
+      // Показать успешное копирование
+      function showCopySuccess(element) {
+        const hint = element.querySelector('.copy-hint');
+        const originalText = hint.textContent;
+        
+        hint.textContent = 'Скопировано!';
+        hint.style.color = 'var(--success, #28a745)';
+        
+        setTimeout(() => {
+          hint.textContent = originalText;
+          hint.style.color = '';
+        }, 2000);
+      }
+    })();
+  </script>
+
+  <style>
+    .payment-item {
+      margin-bottom: 16px;
+    }
+
+    .payment-item label {
+      display: block;
+      font-weight: 600;
+      margin-bottom: 4px;
+      color: var(--text-primary);
+    }
+
+    .payment-value {
+      background: var(--bg-secondary);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 12px;
+      cursor: pointer;
+      transition: all 0.2s ease;
+      position: relative;
+    }
+
+    .payment-value:hover {
+      background: var(--bg-hover);
+      border-color: var(--primary);
+    }
+
+    .payment-value span:first-child {
+      display: block;
+      font-family: monospace;
+      font-size: 14px;
+      word-break: break-all;
+      margin-bottom: 4px;
+    }
+
+    .copy-hint {
+      font-size: 12px;
+      color: var(--text-muted);
+      font-style: italic;
+    }
+
+    .input {
+      width: 100%;
+      padding: 12px;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      background: var(--bg-primary);
+      color: var(--text-primary);
+      font-size: 16px;
+    }
+
+    .input:focus {
+      outline: none;
+      border-color: var(--primary);
+    }
+  </style>
+</body>
+</html>

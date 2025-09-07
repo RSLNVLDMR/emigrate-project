@@ -134,6 +134,7 @@
 
   "item.formular": "Формуляр на карту пабыту",
   "item.supplement1": "Дапаўненне №1 - Карта пабыту па працы",
+  "item.payment": "Аплата за падачу на карту пабыту",
 
   "formular_title": "Формуляр на карту пабыту",
   "formular_description": "Афіцыйны формуляр",
@@ -165,5 +166,24 @@
   "supplement1_instruction_2": "Пазначце дакладныя даныя пра працадаўцу",
   "supplement1_instruction_3": "Дадайце копію працоўнага дагавора",
   "supplement1_instruction_4": "Праверце правільнасць усіх даных",
-  "supplement1_instruction_5": "Падпішыце дакумент"
+  "supplement1_instruction_5": "Падпішыце дакумент",
+
+  "payment_title": "Аплата за падачу на карту пабыту",
+  "payment_description": "Інфармацыя пра аплату",
+  "payment_description_text": "Для падачы заявы на карту пабыту неабходна сплаціць дзяржаўнае мыта. Выберыце ваша ваяводства, каб атрымаць актуальныя рэквізіты для аплаты.",
+  "payment_amount": "Сума да аплаты: 440 злотых",
+  "payment_voivodeship": "Выберыце ваяводства",
+  "payment_select_voivodeship": "Выберыце ваяводства",
+  "payment_details": "Рэквізіты для аплаты",
+  "payment_recipient": "Атрымальнік:",
+  "payment_account": "Нумар рахунку:",
+  "payment_description_field": "Апісанне плацяжу:",
+  "payment_amount_field": "Сума:",
+  "payment_click_to_copy": "Націсніце для капіравання",
+  "payment_instructions": "Інструкцыі па аплаце",
+  "payment_instruction_1": "Сплаціце мыта да падачы дакументаў",
+  "payment_instruction_2": "Захавайце квітанцыю пра аплату",
+  "payment_instruction_3": "Дадайце квітанцыю да заявы",
+  "payment_instruction_4": "Праверце правільнасць рэквізітаў",
+  "payment_instruction_5": "Аплата дзейнічае на працягу 30 дзён"
 }

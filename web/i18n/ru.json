@@ -134,6 +134,7 @@
 
   "item.formular": "Формуляр на карту побыту",
   "item.supplement1": "Дополнение №1 - Карта побыту по работе",
+  "item.payment": "Оплата за подачу на карту побыту",
 
   "formular_title": "Формуляр на карту побыту",
   "formular_description": "Официальный формуляр",
@@ -165,5 +166,24 @@
   "supplement1_instruction_2": "Укажите точные данные о работодателе",
   "supplement1_instruction_3": "Приложите копию трудового договора",
   "supplement1_instruction_4": "Проверьте правильность всех данных",
-  "supplement1_instruction_5": "Подпишите документ"
+  "supplement1_instruction_5": "Подпишите документ",
+
+  "payment_title": "Оплата за подачу на карту побыту",
+  "payment_description": "Информация об оплате",
+  "payment_description_text": "Для подачи заявления на карту побыту необходимо оплатить государственную пошлину. Выберите ваше воеводство, чтобы получить актуальные реквизиты для оплаты.",
+  "payment_amount": "Сумма к оплате: 440 злотых",
+  "payment_voivodeship": "Выберите воеводство",
+  "payment_select_voivodeship": "Выберите воеводство",
+  "payment_details": "Реквизиты для оплаты",
+  "payment_recipient": "Получатель:",
+  "payment_account": "Номер счета:",
+  "payment_description_field": "Описание платежа:",
+  "payment_amount_field": "Сумма:",
+  "payment_click_to_copy": "Нажмите для копирования",
+  "payment_instructions": "Инструкции по оплате",
+  "payment_instruction_1": "Оплатите пошлину до подачи документов",
+  "payment_instruction_2": "Сохраните квитанцию об оплате",
+  "payment_instruction_3": "Приложите квитанцию к заявлению",
+  "payment_instruction_4": "Проверьте правильность реквизитов",
+  "payment_instruction_5": "Оплата действительна в течение 30 дней"
 }
