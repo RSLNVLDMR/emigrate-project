@@ -60,20 +60,44 @@
     <a class="tab" href="./consultant.html" data-i18n="nav_consultant">Консультант</a>
   </div>
 
-  <script src="./utils.js"></script>
+  <script type="module">
+    import { $$, i18n, storage } from './utils.js';
+    
+    // Делаем функции доступными глобально
+    window.$$ = $$;
+    window.i18n = i18n;
+    window.storage = storage;
+
+    function bindLang(){ 
+      $$('.lang button').forEach(b=> b.onclick = async ()=> {
+        await i18n.load(b.dataset.lang);
+        highlightLang();
+      }); 
+    }
+
+    function highlightLang(){ 
+      $$('.lang button').forEach(b=> b.classList.toggle('active', b.dataset.lang===i18n.lang)); 
+    }
+
+    function initTG(){ 
+      const tg = window.Telegram && window.Telegram.WebApp; 
+      if(!tg) return; 
+      tg.expand(); 
+      tg.ready(); 
+    }
+
+    async function boot(){
+      initTG();
+      bindLang();
+      await i18n.load(storage.get('lang','ru'));
+      highlightLang();
+    }
+
+    document.addEventListener('DOMContentLoaded', boot);
+    window.addEventListener('pageshow', boot);
+  </script>
   <script>
     (function() {
-      // Инициализация Telegram Web App
-      if (window.Telegram && window.Telegram.WebApp) {
-        const tg = window.Telegram.WebApp;
-        tg.expand();
-        tg.ready();
-      }
-
-      // Загрузка переводов
-      if (typeof loadTranslations === 'function') {
-        loadTranslations();
-      }
 
       // Функция скачивания дополнения №1
       window.downloadSupplement1 = function() {
