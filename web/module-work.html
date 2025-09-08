@@ -1,0 +1,300 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title data-i18n="work_title">Работа</title>
+  <link rel="stylesheet" href="./styles.css">
+  <script src="https://telegram.org/js/telegram-web-app.js"></script>
+  <style>
+    .contract-selector {
+      margin: 16px 0;
+    }
+    
+    .contract-selector label {
+      display: block;
+      margin-bottom: 8px;
+      font-weight: 500;
+      color: var(--text-primary);
+    }
+    
+    .contract-selector select {
+      width: 100%;
+      padding: 12px;
+      border: 2px solid var(--border);
+      border-radius: 8px;
+      background: var(--bg-primary);
+      color: var(--text-primary);
+      font-size: 16px;
+      transition: border-color 0.2s;
+    }
+    
+    .contract-selector select:focus {
+      outline: none;
+      border-color: var(--accent);
+    }
+    
+    .contract-info {
+      margin-top: 20px;
+      padding: 20px;
+      background: var(--bg-secondary);
+      border-radius: 12px;
+      border-left: 4px solid var(--accent);
+    }
+    
+    .contract-type-info h3 {
+      margin: 0 0 16px 0;
+      color: var(--accent);
+      font-size: 20px;
+    }
+    
+    .info-section {
+      margin-bottom: 16px;
+    }
+    
+    .info-section h4 {
+      margin: 0 0 8px 0;
+      color: var(--text-primary);
+      font-size: 16px;
+    }
+    
+    .insurance-info {
+      background: var(--success-light);
+      padding: 12px;
+      border-radius: 8px;
+      margin: 0;
+      font-weight: 500;
+      color: var(--success);
+    }
+    
+    .info-section ul {
+      margin: 0;
+      padding-left: 20px;
+    }
+    
+    .info-section li {
+      margin-bottom: 4px;
+      color: var(--text-secondary);
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="lang">
+      <button data-lang="ru" class="active">RU</button>
+      <button data-lang="ua">UA</button>
+      <button data-lang="by">BY</button>
+    </div>
+
+    <div class="header">
+      <h1 data-i18n="work_title">Работа</h1>
+      <p data-i18n="work_description">Требования к трудовому договору для подачи на карту побыту</p>
+    </div>
+
+    <div class="content">
+      <div class="section">
+        <h2 data-i18n="work_contract_type">Тип договора</h2>
+        <div class="contract-selector">
+          <label for="contractType" data-i18n="work_select_contract">Выберите ваш тип договора:</label>
+          <select id="contractType" onchange="updateContractInfo()">
+            <option value="" data-i18n="work_select_placeholder">Выберите тип договора</option>
+            <option value="uop" data-i18n="work_contract_uop">umowa o pracę</option>
+            <option value="zlecenie" data-i18n="work_contract_zlecenie">zlecenie</option>
+            <option value="dzielo" data-i18n="work_contract_dzielo">o dzieło</option>
+          </select>
+        </div>
+        
+        <div id="contractInfo" class="contract-info" style="display: none;">
+          <div id="contractDetails"></div>
+        </div>
+        
+        <div class="actions" style="margin-top: 20px;">
+          <button class="btn btn-primary" onclick="checkDocument()" data-i18n="work_check_document">
+            Проверить документ через AI
+          </button>
+        </div>
+      </div>
+
+      <div class="section">
+        <h2 data-i18n="work_duration">Срок договора</h2>
+        <div class="requirement">
+          <span data-i18n="work_duration_minimum">Минимум 3 месяца</span>
+        </div>
+      </div>
+
+      <div class="section">
+        <h2 data-i18n="work_salary">Зарплата</h2>
+        <ul>
+          <li data-i18n="work_salary_minimum">≥ 4666 зл. брутто/мес. (2025)</li>
+          <li data-i18n="work_salary_hourly">≥ 30,20 зл./час</li>
+          <li data-i18n="work_salary_combined">Можно суммировать доходы из нескольких договоров</li>
+          <li data-i18n="work_salary_dependent">+823 зл. нетто на каждого иждивенца</li>
+        </ul>
+      </div>
+
+      <div class="section">
+        <h2 data-i18n="work_scope">Объем работы</h2>
+        <div class="requirement">
+          <span data-i18n="work_scope_requirement">Должен быть указан (полный/частичный, часы)</span>
+        </div>
+      </div>
+
+      <div class="section">
+        <h2 data-i18n="work_legality">Легальность работы</h2>
+        <ul>
+          <li data-i18n="work_legality_permit">Есть разрешение на работу (тип A)</li>
+          <li data-i18n="work_legality_declaration">Или зарегистрированное oświadczenie</li>
+        </ul>
+      </div>
+
+      <div class="section">
+        <h2 data-i18n="work_insurance">Страховка</h2>
+        <ul>
+          <li data-i18n="work_insurance_uop">UoP/UoZ → ZUS</li>
+          <li data-i18n="work_insurance_uod">UoD → частный полис</li>
+        </ul>
+      </div>
+
+      <div class="section">
+        <h2 data-i18n="work_documents">Необходимые документы</h2>
+        <ul>
+          <li data-i18n="work_documents_contract">Договор</li>
+          <li data-i18n="work_documents_attachment">Załącznik nr 1</li>
+          <li data-i18n="work_documents_permit_copy">Копия разрешения/oświadczenie</li>
+          <li data-i18n="work_documents_housing">Подтверждение жилья</li>
+          <li data-i18n="work_documents_photo">Фото</li>
+          <li data-i18n="work_documents_receipt">Квитанция 440 зл.</li>
+        </ul>
+      </div>
+
+      <div class="section warning">
+        <h2 data-i18n="work_rejection_reasons">❌ Причины отказа</h2>
+        <ul>
+          <li data-i18n="work_rejection_salary">Зарплата ниже минимума</li>
+          <li data-i18n="work_rejection_duration">Срок менее 3 месяцев</li>
+          <li data-i18n="work_rejection_legalization">Нет легализации работы</li>
+          <li data-i18n="work_rejection_insurance">Нет страховки</li>
+          <li data-i18n="work_rejection_documents">Неполный пакет документов</li>
+          <li data-i18n="work_rejection_employer">Фиктивный работодатель</li>
+        </ul>
+      </div>
+
+      <div class="actions">
+        <button class="btn btn-primary" onclick="checkDocument()" data-i18n="work_check_document">
+          Проверить документ через AI
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <div class="tabs">
+    <a class="tab" href="./translator.html" data-i18n="nav_translator">Переводчик</a>
+    <a class="tab" href="./checklist.html" data-i18n="nav_checklist">Чеклист</a>
+    <a class="tab" href="./consultant.html" data-i18n="nav_consultant">Консультант</a>
+  </div>
+
+  <script type="module">
+    import { $$, i18n, storage } from './utils.js';
+    
+    // Делаем функции доступными глобально
+    window.$$ = $$;
+    window.i18n = i18n;
+    window.storage = storage;
+
+    function bindLang(){ 
+      $$('.lang button').forEach(b=> b.onclick = async ()=> {
+        await i18n.load(b.dataset.lang);
+        highlightLang();
+      }); 
+    }
+
+    function highlightLang(){ 
+      $$('.lang button').forEach(b=> b.classList.toggle('active', b.dataset.lang===i18n.lang)); 
+    }
+
+    function initTG(){ 
+      const tg = window.Telegram && window.Telegram.WebApp; 
+      if(!tg) return; 
+      tg.expand(); 
+      tg.ready(); 
+    }
+
+    async function boot(){
+      initTG();
+      bindLang();
+      await i18n.load(storage.get('lang','ru'));
+      highlightLang();
+    }
+
+    document.addEventListener('DOMContentLoaded', boot);
+    window.addEventListener('pageshow', boot);
+  </script>
+
+  <script>
+    // Данные для разных типов договоров
+    const contractData = {
+      uop: {
+        title: 'umowa o pracę',
+        insurance: 'ZUS (обязательное социальное страхование)',
+        documents: ['Договор o pracę', 'Załącznik nr 1', 'Копия разрешения/oświadczenie', 'Подтверждение жилья', 'Фото', 'Квитанция 440 зл.'],
+        notes: ['Полная занятость или частичная с указанием часов', 'Минимальная зарплата: 4666 зл. брутто/мес.', 'Можно суммировать с другими договорами']
+      },
+      zlecenie: {
+        title: 'zlecenie',
+        insurance: 'ZUS (обязательное социальное страхование)',
+        documents: ['Договор zlecenie', 'Załącznik nr 1', 'Копия разрешения/oświadczenie', 'Подтверждение жилья', 'Фото', 'Квитанция 440 зл.'],
+        notes: ['Указать объем работы (часы/задачи)', 'Минимальная зарплата: 30,20 зл./час', 'Можно суммировать с другими договорами']
+      },
+      dzielo: {
+        title: 'o dzieło',
+        insurance: 'Частный медицинский полис (обязательно!)',
+        documents: ['Договор o dzieło', 'Załącznik nr 1', 'Копия разрешения/oświadczenie', 'Подтверждение жилья', 'Фото', 'Квитанция 440 зл.', 'Полис медицинского страхования'],
+        notes: ['Указать конкретное задание/проект', 'Минимальная зарплата: 30,20 зл./час', 'ОБЯЗАТЕЛЬНО: частный мед. полис', 'Можно суммировать с другими договорами']
+      }
+    };
+
+    function updateContractInfo() {
+      const select = document.getElementById('contractType');
+      const contractInfo = document.getElementById('contractInfo');
+      const contractDetails = document.getElementById('contractDetails');
+      
+      if (!select.value) {
+        contractInfo.style.display = 'none';
+        return;
+      }
+      
+      const data = contractData[select.value];
+      if (!data) return;
+      
+      contractDetails.innerHTML = `
+        <div class="contract-type-info">
+          <h3>${data.title}</h3>
+          <div class="info-section">
+            <h4 data-i18n="work_insurance">Страховка:</h4>
+            <p class="insurance-info">${data.insurance}</p>
+          </div>
+          <div class="info-section">
+            <h4 data-i18n="work_documents">Необходимые документы:</h4>
+            <ul>
+              ${data.documents.map(doc => `<li>${doc}</li>`).join('')}
+            </ul>
+          </div>
+          <div class="info-section">
+            <h4 data-i18n="work_important_notes">Важные замечания:</h4>
+            <ul>
+              ${data.notes.map(note => `<li>${note}</li>`).join('')}
+            </ul>
+          </div>
+        </div>
+      `;
+      
+      contractInfo.style.display = 'block';
+    }
+
+    function checkDocument() {
+      // Заглушка для AI проверки документов
+      alert('Функция проверки документов через AI будет доступна в ближайшее время');
+    }
+  </script>
+</body>
+</html>

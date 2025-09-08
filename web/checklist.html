@@ -103,7 +103,7 @@
       {slug:'payment', i18n:'item.payment'},
       {slug:'supplement1', i18n:'item.supplement1'},
       {slug:'pesel-rights', i18n:'item.pesel_rights'},
-      {slug:'work-insurance', i18n:'item.work_insurance'},
+      {slug:'work', i18n:'item.work'},
       {slug:'address', i18n:'item.address'},
       {slug:'photos', i18n:'item.photos'}
     ],
@@ -128,6 +128,7 @@
     if(slug==='formular') return './module-formular.html'; // ⬅️ модуль формуляра
     if(slug==='supplement1') return './module-supplement1.html'; // ⬅️ модуль дополнения №1
     if(slug==='payment') return './module-payment.html'; // ⬅️ модуль оплаты
+    if(slug==='work') return './module-work.html'; // ⬅️ модуль работы
     return '#todo';
   }
   function computeProgress(items){ const done = items.filter(x=>x.done).length; return Math.round((done / Math.max(items.length,1)) * 100); }
