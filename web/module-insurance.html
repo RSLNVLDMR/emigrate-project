@@ -1,0 +1,103 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8" />
+  <title>Страховка — eMigrant</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <script src="https://telegram.org/js/telegram-web-app.js"></script>
+  <link rel="stylesheet" href="./styles.css" />
+</head>
+<body>
+<div class="screen">
+  <div class="container">
+    <div class="header">
+      <div class="h1" data-i18n="insurance_title">Страховка</div>
+      <div class="lang">
+        <button data-lang="ru" class="active">RU</button>
+        <button data-lang="ua">UA</button>
+        <button data-lang="by">BY</button>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="h2" data-i18n="insurance_description">Требования к страховке</div>
+      <p class="p" data-i18n="insurance_description_text">
+        Для подачи на карту побыту необходимо иметь действующую медицинскую страховку.
+      </p>
+
+      <div class="info-section">
+        <h3 data-i18n="insurance_requirements">Требования к страховке:</h3>
+        <ul>
+          <li data-i18n="insurance_requirement_1">Страховка должна покрывать медицинские расходы</li>
+          <li data-i18n="insurance_requirement_2">Минимальная сумма покрытия: 30,000 EUR</li>
+          <li data-i18n="insurance_requirement_3">Страховка должна действовать на территории Польши</li>
+          <li data-i18n="insurance_requirement_4">Срок действия: минимум 1 год</li>
+        </ul>
+      </div>
+
+      <div class="info-section">
+        <h3 data-i18n="insurance_types">Типы страховки:</h3>
+        <ul>
+          <li data-i18n="insurance_type_1">Частная медицинская страховка</li>
+          <li data-i18n="insurance_type_2">Страховка через работодателя (ZUS)</li>
+          <li data-i18n="insurance_type_3">Страховка для студентов</li>
+        </ul>
+      </div>
+
+      <div class="actions">
+        <button class="btn btn-primary" onclick="checkInsurance()" data-i18n="insurance_check">
+          Проверить страховку через AI
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <div class="tabs">
+    <a class="tab" href="./translator.html" data-i18n="nav_translator">Переводчик</a>
+    <a class="tab" href="./checklist.html" data-i18n="nav_checklist">Чеклист</a>
+    <a class="tab" href="./consultant.html" data-i18n="nav_consultant">Консультант</a>
+  </div>
+</div>
+
+<script type="module">
+  import { $$, i18n, storage } from './utils.js';
+  
+  // Делаем функции доступными глобально
+  window.$$ = $$;
+  window.i18n = i18n;
+  window.storage = storage;
+
+  function bindLang(){ 
+    $$('.lang button').forEach(b=> b.onclick = async ()=> {
+      await i18n.load(b.dataset.lang);
+      highlightLang();
+    }); 
+  }
+
+  function highlightLang(){ 
+    $$('.lang button').forEach(b=> b.classList.toggle('active', b.dataset.lang===i18n.lang)); 
+  }
+
+  function initTG(){ 
+    const tg = window.Telegram && window.Telegram.WebApp; 
+    if(!tg) return; 
+    tg.expand(); 
+    tg.ready(); 
+  }
+
+  function checkInsurance() {
+    alert('Функция проверки страховки будет реализована позже');
+  }
+
+  async function boot(){
+    initTG();
+    bindLang();
+    await i18n.load(storage.get('lang','ru'));
+    highlightLang();
+  }
+
+  document.addEventListener('DOMContentLoaded', boot);
+  window.addEventListener('pageshow', boot);
+</script>
+</body>
+</html>

@@ -1,0 +1,106 @@
+
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8" />
+  <title>Справка о состоянии счета — eMigrant</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <script src="https://telegram.org/js/telegram-web-app.js"></script>
+  <link rel="stylesheet" href="./styles.css" />
+</head>
+<body>
+<div class="screen">
+  <div class="container">
+    <div class="header">
+      <div class="h1" data-i18n="bank_statement_title">Справка о состоянии счета</div>
+      <div class="lang">
+        <button data-lang="ru" class="active">RU</button>
+        <button data-lang="ua">UA</button>
+        <button data-lang="by">BY</button>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="h2" data-i18n="bank_statement_description">Справка о состоянии счета</div>
+      <p class="p" data-i18n="bank_statement_description_text">
+        Для подачи на карту побыту по учебе необходимо предоставить справку о состоянии банковского счета.
+      </p>
+
+      <div class="info-section">
+        <h3 data-i18n="bank_statement_requirements">Требования к справке:</h3>
+        <ul>
+          <li data-i18n="bank_statement_requirement_1">Справка должна быть выдана банком</li>
+          <li data-i18n="bank_statement_requirement_2">Должна содержать информацию о балансе счета</li>
+          <li data-i18n="bank_statement_requirement_3">Минимальная сумма на счету: 2,500 PLN</li>
+          <li data-i18n="bank_statement_requirement_4">Справка должна быть переведена на польский язык</li>
+          <li data-i18n="bank_statement_requirement_5">Срок действия: не более 3 месяцев</li>
+        </ul>
+      </div>
+
+      <div class="info-section">
+        <h3 data-i18n="bank_statement_how_to_get">Как получить справку:</h3>
+        <ul>
+          <li data-i18n="bank_statement_step_1">Обратиться в банк, где открыт счет</li>
+          <li data-i18n="bank_statement_step_2">Подать заявление на получение справки</li>
+          <li data-i18n="bank_statement_step_3">Предоставить документ, удостоверяющий личность</li>
+          <li data-i18n="bank_statement_step_4">Получить справку в течение 1-3 дней</li>
+        </ul>
+      </div>
+
+      <div class="actions">
+        <button class="btn btn-primary" onclick="checkBankStatement()" data-i18n="bank_statement_check">
+          Проверить справку через AI
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <div class="tabs">
+    <a class="tab" href="./translator.html" data-i18n="nav_translator">Переводчик</a>
+    <a class="tab" href="./checklist.html" data-i18n="nav_checklist">Чеклист</a>
+    <a class="tab" href="./consultant.html" data-i18n="nav_consultant">Консультант</a>
+  </div>
+</div>
+
+<script type="module">
+  import { $$, i18n, storage } from './utils.js';
+  
+  // Делаем функции доступными глобально
+  window.$$ = $$;
+  window.i18n = i18n;
+  window.storage = storage;
+
+  function bindLang(){ 
+    $$('.lang button').forEach(b=> b.onclick = async ()=> {
+      await i18n.load(b.dataset.lang);
+      highlightLang();
+    }); 
+  }
+
+  function highlightLang(){ 
+    $$('.lang button').forEach(b=> b.classList.toggle('active', b.dataset.lang===i18n.lang)); 
+  }
+
+  function initTG(){ 
+    const tg = window.Telegram && window.Telegram.WebApp; 
+    if(!tg) return; 
+    tg.expand(); 
+    tg.ready(); 
+  }
+
+  function checkBankStatement() {
+    alert('Функция проверки справки о состоянии счета будет реализована позже');
+  }
+
+  async function boot(){
+    initTG();
+    bindLang();
+    await i18n.load(storage.get('lang','ru'));
+    highlightLang();
+  }
+
+  document.addEventListener('DOMContentLoaded', boot);
+  window.addEventListener('pageshow', boot);
+</script>
+</body>
+</html>

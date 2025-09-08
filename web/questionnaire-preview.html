@@ -54,15 +54,14 @@
   function labelCit(v){ return v==='ua'?t('cit.ua'):v==='by'?t('cit.by'):v==='ru'?t('cit.ru'):v; }
   function labelStatus(v){ if(v==='pesel_ukr')return t('status.pesel_ukr'); if(v==='asylum')return t('status.asylum'); if(v==='karta_czasowa')return t('status.karta'); if(v==='student')return t('status.student'); if(v==='no_status')return t('status.no_status'); return v; }
   function labelIncome(v){ return v==='lt_4700'?t('income.lt4700'):v==='gt_4700'?t('income.gt4700'):v; }
+  function labelBasis(v){ return v==='work'?t('basis.work'):v==='study'?t('basis.study'):v==='ukr_status'?t('basis.ukr_status'):v; }
 
   // 💡 Алгоритм выбора пути (должен совпадать с checklist.html)
   function decidePath(q){
-    if(q?.status==='student') return 'pobyt_study';
-    if(q?.status==='no_status') return 'regularize';
-    if(q?.status==='pesel_ukr') return 'pesel_support';
-    if(q?.status==='asylum') return 'asylum_support';
-    if(q?.status==='karta_czasowa') return 'pobyt_support';
-    return 'regularize';
+    if(q?.application_basis==='work') return 'work_basis';
+    if(q?.application_basis==='study') return 'study_basis';
+    if(q?.application_basis==='ukr_status') return 'ukr_basis';
+    return 'work_basis'; // по умолчанию
   }
 
   function renderSummary(){
@@ -77,6 +76,7 @@
         <div class="row"><b>${t('field.status')}:</b> <span>${labelStatus(q.status)}</span></div>
         <div class="row"><b>${t('field.voivodeship')}:</b> <span>${q.voivodeship||'-'}</span></div>
         <div class="row"><b>${t('field.income_level')}:</b> <span>${labelIncome(q.income_level)}</span></div>
+        <div class="row"><b>${t('field.application_basis')}:</b> <span>${labelBasis(q.application_basis)}</span></div>
         ${q.student ? `<div class="row"><b>${t('q_student_block')}:</b> <span>${q.student.inst||'-'}, ${q.student.doc||'-'}, ${q.student.start||'-'} — ${q.student.end||'-'}</span></div>` : ''}
         ${q.no_status ? `<div class="row"><b>${t('q_ns_block')}:</b> <span>${q.no_status.last_entry||'-'}, ${q.no_status.has_offer ? t('opt_yes') : t('opt_no')}</span></div>` : ''}
       </div>

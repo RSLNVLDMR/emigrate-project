@@ -67,57 +67,42 @@
 
   // путь и шаблоны
   function decidePath(q){
-    if(q?.status==='student') return 'pobyt_study';
-    if(q?.status==='no_status') return 'regularize';
-    if(q?.status==='pesel_ukr') return 'pesel_support';
-    if(q?.status==='asylum') return 'asylum_support';
-    if(q?.status==='karta_czasowa') return 'pobyt_support';
-    return 'regularize';
+    if(q?.application_basis==='work') return 'work_basis';
+    if(q?.application_basis==='study') return 'study_basis';
+    if(q?.application_basis==='ukr_status') return 'ukr_basis';
+    return 'work_basis'; // по умолчанию
   }
   const PATH_TITLE_KEY = {
-    pobyt_study: 'path.pobyt_study',
-    regularize: 'path.regularize',
-    pesel_support: 'path.pesel_support',
-    asylum_support: 'path.asylum_support',
-    pobyt_support: 'path.pobyt_support'
+    work_basis: 'path.work_basis',
+    study_basis: 'path.study_basis',
+    ukr_basis: 'path.ukr_basis'
   };
   const CHECKLIST_TEMPLATES = {
-    pobyt_study: [
+    work_basis: [
       {slug:'formular', i18n:'item.formular'},
+      {slug:'supplement1', i18n:'item.supplement1'},
+      {slug:'work', i18n:'item.work'},
+      {slug:'photos', i18n:'item.photos'},
       {slug:'payment', i18n:'item.payment'},
+      {slug:'address', i18n:'item.address'},
+      {slug:'insurance', i18n:'item.insurance'},
+      {slug:'tax-certificate', i18n:'item.tax_certificate'},
+      {slug:'pit', i18n:'item.pit'}
+    ],
+    study_basis: [
+      {slug:'formular', i18n:'item.formular'},
       {slug:'student-zaswiadczenie', i18n:'item.student_zaswiadczenie'},
       {slug:'photos', i18n:'item.photos'},
-      {slug:'photo-fee-wniosek', i18n:'item.photo_fee_wniosek'},
-      {slug:'visit-biometrics', i18n:'item.visit_biometrics'}
-    ],
-    regularize: [
-      {slug:'formular', i18n:'item.formular'},
       {slug:'payment', i18n:'item.payment'},
-      {slug:'choose-basis', i18n:'item.choose_basis'},
-      {slug:'photos', i18n:'item.photos'},
-      {slug:'collect-docs', i18n:'item.collect_docs'},
-      {slug:'submit-pobyt', i18n:'item.submit_pobyt'}
-    ],
-    pesel_support: [
-      {slug:'formular', i18n:'item.formular'},
-      {slug:'payment', i18n:'item.payment'},
-      {slug:'supplement1', i18n:'item.supplement1'},
-      {slug:'pesel-rights', i18n:'item.pesel_rights'},
-      {slug:'work', i18n:'item.work'},
       {slug:'address', i18n:'item.address'},
-      {slug:'photos', i18n:'item.photos'}
+      {slug:'insurance', i18n:'item.insurance'},
+      {slug:'bank-statement', i18n:'item.bank_statement'}
     ],
-    asylum_support: [
-      {slug:'asylum-brief', i18n:'item.asylum_brief'},
-      {slug:'parallel-options', i18n:'item.parallel_options'}
-    ],
-    pobyt_support: [
+    ukr_basis: [
       {slug:'formular', i18n:'item.formular'},
+      {slug:'photos', i18n:'item.photos'},
       {slug:'payment', i18n:'item.payment'},
-      {slug:'supplement1', i18n:'item.supplement1'},
-      {slug:'obligations', i18n:'item.obligations'},
-      {slug:'employer-change', i18n:'item.employer_change'},
-      {slug:'photos', i18n:'item.photos'}
+      {slug:'pesel-ukr', i18n:'item.pesel_ukr'}
     ]
   };
   function moduleLink(slug){
@@ -129,12 +114,17 @@
     if(slug==='supplement1') return './module-supplement1.html'; // ⬅️ модуль дополнения №1
     if(slug==='payment') return './module-payment.html'; // ⬅️ модуль оплаты
     if(slug==='work') return './module-work.html'; // ⬅️ модуль работы
+    if(slug==='insurance') return './module-insurance.html'; // ⬅️ модуль страховки
+    if(slug==='tax-certificate') return './module-tax-certificate.html'; // ⬅️ модуль справки о налогах
+    if(slug==='pit') return './module-pit.html'; // ⬅️ модуль PIT
+    if(slug==='bank-statement') return './module-bank-statement.html'; // ⬅️ модуль справки о состоянии счета
+    if(slug==='pesel-ukr') return './module-pesel-ukr.html'; // ⬅️ модуль PESEL UKR
     return '#todo';
   }
   function computeProgress(items){ const done = items.filter(x=>x.done).length; return Math.round((done / Math.max(items.length,1)) * 100); }
 
   // состояние
-  let pathId = 'regularize';
+  let pathId = 'work_basis';
   let items = [];
 
   function ensureChecklist(){

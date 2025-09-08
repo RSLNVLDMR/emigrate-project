@@ -72,6 +72,11 @@
         <select id="income_level" class="input"></select>
       </label>
 
+      <label class="col">
+        <span data-i18n="q_application_basis">Я хочу податься на карту на основании</span>
+        <select id="application_basis" class="input"></select>
+      </label>
+
       <div id="student_extra" class="card hidden">
         <div class="h2" data-i18n="q_student_block">Данные для учащегося</div>
         <label class="col"><span data-i18n="q_student_inst">Учебное заведение</span><input id="stud_inst" class="input" placeholder="UW / PW / …"/></label>
@@ -173,6 +178,14 @@
       <option value="lt_4700">${t('income.lt4700')}</option>
       <option value="gt_4700">${t('income.gt4700')}</option>
     `;
+
+    // Application Basis
+    const basis = $('#application_basis');
+    basis.innerHTML = `
+      <option value="work">${t('basis.work')}</option>
+      <option value="study">${t('basis.study')}</option>
+      <option value="ukr_status">${t('basis.ukr_status')}</option>
+    `;
   }
 
   // Validation
@@ -201,7 +214,8 @@
         citizenship: $('#citizenship').value,
         status: $('#status').value,
         voivodeship: $('#voivodeship').value,
-        income_level: $('#income_level').value
+        income_level: $('#income_level').value,
+        application_basis: $('#application_basis').value
       };
 
       if(q.status==='student'){
