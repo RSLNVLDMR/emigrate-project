@@ -6,6 +6,62 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <script src="https://telegram.org/js/telegram-web-app.js"></script>
   <link rel="stylesheet" href="./styles.css" />
+  <style>
+    .step {
+      margin: 20px 0;
+      padding: 15px;
+      background: #f8f9fa;
+      border-radius: 8px;
+      border-left: 4px solid #007bff;
+    }
+    
+    .step h5 {
+      margin: 0 0 10px 0;
+      color: #007bff;
+      font-weight: 600;
+    }
+    
+    .step p {
+      margin: 0 0 10px 0;
+    }
+    
+    .step ul {
+      margin: 10px 0;
+      padding-left: 20px;
+    }
+    
+    .info-box {
+      background: #fff3cd;
+      border: 1px solid #ffeaa7;
+      border-radius: 8px;
+      padding: 15px;
+      margin: 20px 0;
+    }
+    
+    .info-box h5 {
+      margin: 0 0 10px 0;
+      color: #856404;
+    }
+    
+    .info-box ul {
+      margin: 0;
+      padding-left: 20px;
+    }
+    
+    .btn-secondary {
+      background: #6c757d;
+      color: white;
+      border: none;
+      padding: 10px 20px;
+      border-radius: 5px;
+      cursor: pointer;
+      font-size: 14px;
+    }
+    
+    .btn-secondary:hover {
+      background: #5a6268;
+    }
+  </style>
 </head>
 <body>
 <div class="screen">
@@ -20,33 +76,129 @@
     </div>
 
     <div class="card">
-      <div class="h2" data-i18n="insurance_description">Требования к страховке</div>
+      <div class="h2" data-i18n="insurance_description">Требования к страховке для карты побыту</div>
       <p class="p" data-i18n="insurance_description_text">
-        Для подачи на карту побыту необходимо иметь действующую медицинскую страховку.
+        Чтобы подать документы на карту побыту, у вас должна быть действующая медицинская страховка.
       </p>
 
       <div class="info-section">
-        <h3 data-i18n="insurance_requirements">Требования к страховке:</h3>
+        <h3 data-i18n="insurance_requirements">Что важно:</h3>
         <ul>
-          <li data-i18n="insurance_requirement_1">Страховка должна покрывать медицинские расходы</li>
-          <li data-i18n="insurance_requirement_2">Минимальная сумма покрытия: 30,000 EUR</li>
-          <li data-i18n="insurance_requirement_3">Страховка должна действовать на территории Польши</li>
-          <li data-i18n="insurance_requirement_4">Срок действия: минимум 1 год</li>
+          <li data-i18n="insurance_requirement_1">страховка покрывает все медицинские расходы;</li>
+          <li data-i18n="insurance_requirement_2">минимальная сумма покрытия — 30 000 EUR;</li>
+          <li data-i18n="insurance_requirement_3">действует на территории Польши;</li>
+          <li data-i18n="insurance_requirement_4">срок действия — минимум 1 год.</li>
         </ul>
       </div>
 
       <div class="info-section">
-        <h3 data-i18n="insurance_types">Типы страховки:</h3>
+        <h3 data-i18n="insurance_types">Какие есть варианты страховки:</h3>
         <ul>
-          <li data-i18n="insurance_type_1">Частная медицинская страховка</li>
-          <li data-i18n="insurance_type_2">Страховка через работодателя (ZUS)</li>
-          <li data-i18n="insurance_type_3">Страховка для студентов</li>
+          <li data-i18n="insurance_type_1">Частная медицинская страховка — можно купить в страховой компании.</li>
+          <li data-i18n="insurance_type_2">Страховка через работодателя (ZUS) — если вы официально работаете.</li>
+          <li data-i18n="insurance_type_3">Частная страховка для студентов</li>
         </ul>
+      </div>
+
+      <div class="info-section">
+        <h3 data-i18n="insurance_zus_title">Справка ZUS US7 для работы и учебы</h3>
+        <p data-i18n="insurance_zus_description">
+          Если вы подаетесь на карту побыту по работе (только Umowa o prace или Umowa o zlecenie) или учебе, вам необходима справка ZUS US7, подтверждающая ваше медицинское страхование через ZUS.
+        </p>
+        
+        <div class="actions" style="margin: 15px 0;">
+          <button class="btn btn-secondary" onclick="showZusInstructions()" data-i18n="insurance_zus_instructions">
+            📋 Показать пошаговую инструкцию
+          </button>
+        </div>
+
+        <div id="zusInstructions" class="info-section" style="display: none;">
+          <h4 data-i18n="insurance_zus_steps_title">Как получить справку ZUS US7 через ZUE PUE:</h4>
+          
+          <div class="step">
+            <h5 data-i18n="insurance_zus_step_1_title">Шаг 1: Вход в систему ZUE PUE</h5>
+            <p data-i18n="insurance_zus_step_1_text">
+              Перейдите на сайт <a href="https://www.zus.pl" target="_blank">www.zus.pl</a> 
+              и нажмите "ZUE PUE" в правом верхнем углу.
+            </p>
+          </div>
+
+          <div class="step">
+            <h5 data-i18n="insurance_zus_step_2_title">Шаг 2: Авторизация</h5>
+            <p data-i18n="insurance_zus_step_2_text">
+              Войдите в систему используя:
+            </p>
+            <ul>
+              <li data-i18n="insurance_zus_step_2_option1">Profil Zaufany (доверенный профиль)</li>
+              <li data-i18n="insurance_zus_step_2_option2">ePUAP</li>
+              <li data-i18n="insurance_zus_step_2_option3">Логин и пароль ZUS</li>
+            </ul>
+          </div>
+
+          <div class="step">
+            <h5 data-i18n="insurance_zus_step_3_title">Шаг 3: Поиск услуги</h5>
+            <p data-i18n="insurance_zus_step_3_text">
+              В главном меню найдите раздел "Услуги" (Usługi) и выберите 
+              "Справки и документы" (Zaświadczenia i dokumenty).
+            </p>
+          </div>
+
+          <div class="step">
+            <h5 data-i18n="insurance_zus_step_4_title">Шаг 4: Выбор справки US7</h5>
+            <p data-i18n="insurance_zus_step_4_text">
+              Найдите и выберите "Zaświadczenie o ubezpieczeniu społecznym US7" 
+              (Справка о социальном страховании US7).
+            </p>
+          </div>
+
+          <div class="step">
+            <h5 data-i18n="insurance_zus_step_5_title">Шаг 5: Заполнение заявления</h5>
+            <p data-i18n="insurance_zus_step_5_text">
+              Заполните электронное заявление, указав:
+            </p>
+            <ul>
+              <li data-i18n="insurance_zus_step_5_item1">Цель получения справки: "wniosek o kartę pobytu"</li>
+              <li data-i18n="insurance_zus_step_5_item2">Период страхования</li>
+              <li data-i18n="insurance_zus_step_5_item3">Контактные данные</li>
+            </ul>
+          </div>
+
+          <div class="step">
+            <h5 data-i18n="insurance_zus_step_6_title">Шаг 6: Отправка заявления</h5>
+            <p data-i18n="insurance_zus_step_6_text">
+              Проверьте данные и отправьте заявление. Вы получите подтверждение 
+              с номером дела (numer sprawy).
+            </p>
+          </div>
+
+          <div class="step">
+            <h5 data-i18n="insurance_zus_step_7_title">Шаг 7: Получение справки</h5>
+            <p data-i18n="insurance_zus_step_7_text">
+              Справка будет доступна для скачивания в течение 7 рабочих дней 
+              в разделе "Мои документы" (Moje dokumenty).
+            </p>
+          </div>
+
+          <div class="info-box">
+            <h5 data-i18n="insurance_zus_important_title">⚠️ Важно:</h5>
+            <ul>
+              <li data-i18n="insurance_zus_important_1">Справка действительна 30 дней с даты выдачи</li>
+              <li data-i18n="insurance_zus_important_2">Скачайте справку в формате PDF</li>
+              <li data-i18n="insurance_zus_important_3">Сохраните подтверждение отправки заявления</li>
+            </ul>
+          </div>
+
+          <div class="actions" style="margin-top: 20px;">
+            <button class="btn btn-secondary" onclick="hideZusInstructions()" data-i18n="insurance_zus_hide">
+              Скрыть инструкцию
+            </button>
+          </div>
+        </div>
       </div>
 
       <div class="actions">
         <button class="btn btn-primary" onclick="checkInsurance()" data-i18n="insurance_check">
-          Проверить страховку через AI
+          Проверить документы с AI
         </button>
       </div>
     </div>
@@ -86,8 +238,28 @@
   }
 
   function checkInsurance() {
-    alert('Функция проверки страховки будет реализована позже');
+    alert('Функция проверки документов будет реализована позже');
   }
+
+  function showZusInstructions() {
+    const instructions = document.getElementById('zusInstructions');
+    if (instructions) {
+      instructions.style.display = 'block';
+      instructions.scrollIntoView({ behavior: 'smooth' });
+    }
+  }
+
+  function hideZusInstructions() {
+    const instructions = document.getElementById('zusInstructions');
+    if (instructions) {
+      instructions.style.display = 'none';
+    }
+  }
+
+  // Делаем функции доступными глобально
+  window.showZusInstructions = showZusInstructions;
+  window.hideZusInstructions = hideZusInstructions;
+  window.checkInsurance = checkInsurance;
 
   async function boot(){
     initTG();
