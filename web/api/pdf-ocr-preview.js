@@ -20,13 +20,18 @@ function getApiKey() {
 async function renderPdfToPngBuffers(pdfBuffer, maxPages = 10, scale = 2.2) {
   const pdfjs = await import("pdfjs-dist/legacy/build/pdf.mjs");
   const { createCanvas } = await import("@napi-rs/canvas");
-  const doc = await pdfjs.getDocument({ data: pdfBuffer, disableWorker: true }).promise;
+
+  // ВАЖНО: передаём именно Uint8Array
+  const doc = await pdfjs
+    .getDocument({ data: new Uint8Array(pdfBuffer), disableWorker: true })
+    .promise;
+
   const pages = Math.min(doc.numPages, maxPages);
   const out = [];
   for (let i = 1; i <= pages; i++) {
     const page = await doc.getPage(i);
     const viewport = page.getViewport({ scale });
-    const canvas = createCanvas(viewport.width, viewport.height);
+    const canvas = createCanvas(Math.max(1, Math.floor(viewport.width)), Math.max(1, Math.floor(viewport.height)));
     const ctx = canvas.getContext("2d");
     await page.render({ canvasContext: ctx, viewport }).promise;
     out.push(canvas.toBuffer("image/png"));
@@ -38,12 +43,15 @@ async function combineBuffersVerticallyToJpeg(buffers) {
   const { createCanvas, loadImage } = await import("@napi-rs/canvas");
   const images = [];
   let width = 0, height = 0;
+
   for (const b of buffers) {
-    const img = await loadImage(b);
+    // ВАЖНО: передаём Uint8Array
+    const img = await loadImage(new Uint8Array(b));
     images.push(img);
     width = Math.max(width, img.width);
     height += img.height;
   }
+
   const canvas = createCanvas(width, height);
   const ctx = canvas.getContext("2d");
   let y = 0;
@@ -63,7 +71,7 @@ async function buildImageInputsFromBuffers(buffers) {
       const base = await sharpLib(buf).rotate().resize({ width: 2400, withoutEnlargement: true }).jpeg({ quality: 92 }).toBuffer();
       inputs.push({ type: "image_url", image_url: { url: `data:image/jpeg;base64,${base.toString("base64")}` } });
     } else {
-      inputs.push({ type: "image_url", image_url: { url: `data:image/jpeg;base64,${buf.toString("base64")}` } });
+      inputs.push({ type: "image_url", image_url: { url: `data:image/jpeg;base64,${Buffer.from(buf).toString("base64")}` } });
     }
   }
   return inputs;
