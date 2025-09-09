@@ -122,7 +122,6 @@ function addError(arr, code, title, detail, severity = "major") {
   if ((arr || []).some((e) => norm(e.code) === keyCode || norm(e.title) === keyTitle)) return;
   arr.push({ code, title, detail, severity });
 }
-
 function isExpiryErr(e) {
   const t = norm(e.title);
   const c = norm(e.code);
@@ -252,7 +251,7 @@ function ruleCheck(docType, modelJson) {
 
   if (docType === "owner") {
     const ownershipMarks =
-      containsAny(title, ["kw", "księга", "ksiega", "акт", "własno", "wlasno"]) ||
+      containsAny(title, ["kw", "księга", "ksiega", "акт", "własно", "wlasno"]) ||
       containsAny(issuer, ["sąd", "sad", "notariusz"]);
     if (!ownershipMarks)
       addError(
@@ -310,7 +309,7 @@ async function buildImageInputsFromBuffers(buffers) {
   return inputs;
 }
 
-async function renderPdfToPngBuffers(pdfBuffer, maxPages = 3, scale = 2.6) {
+async function renderPdfToPngBuffers(pdfBuffer, maxPages = 10, scale = 2.2) {
   const pdfjs = await import("pdfjs-dist/legacy/build/pdf.mjs");
   const { createCanvas } = await import("@napi-rs/canvas");
   const doc = await pdfjs.getDocument({ data: pdfBuffer, disableWorker: true }).promise;
@@ -344,7 +343,7 @@ export default async function handler(req, res) {
   try {
     const form = formidable({
       multiples: false,
-      maxFileSize: 10 * 1024 * 1024,
+      maxFileSize: 40 * 1024 * 1024, // <— подняли лимит до 40 МБ
       uploadDir: "/tmp",
       keepExtensions: true,
     });
@@ -368,7 +367,7 @@ export default async function handler(req, res) {
 
     const baseInstruction = `
 Ты — строгий верификатор подтверждений адреса в Польше.
-Работай на польских/русских документах. Если информации недостаточно, всё равно дай заключение и перечисли причины (не используй уклончивые ответы).
+Работай на польских/русских документах. Если информации недостаточно, всё равно дай заключение и перечисли причины.
 1) Выполни OCR и извлечение данных (даже если изображение длинное и содержит несколько страниц).
 2) Определи вид документа и пригодность (is_proof_of_address).
 3) Заполни fieldsExtracted и выяви ошибки по правилам ниже.
@@ -384,7 +383,6 @@ ${OUTPUT_SPEC}
     let messages;
 
     if (mime === "application/pdf") {
-      // 1) пробуем вытянуть «живой» текст
       let pdfParse;
       try {
         const mod = await import("pdf-parse");
@@ -407,8 +405,7 @@ ${OUTPUT_SPEC}
       }
 
       if (!textOk) {
-        // 2) PDF-скан → до 3 страниц в Vision
-        const pageBuffers = await renderPdfToPngBuffers(buf, 3, 2.6);
+        const pageBuffers = await renderPdfToPngBuffers(buf, 10, 2.2); // <— до 10 страниц
         if (!pageBuffers.length) {
           res.status(400).json({ error: "Не удалось обработать PDF. Загрузите фото/скан." });
           return;
@@ -464,7 +461,6 @@ ${OUTPUT_SPEC}
       };
     }
 
-    // Если модель уклонилась — превращаем в FAIL с понятной причиной
     if (!json || json.verdict === "uncertain") {
       json = json || {};
       json.is_proof_of_address = false;
@@ -474,7 +470,7 @@ ${OUTPUT_SPEC}
         json.errors,
         "low_quality",
         "Недостаточно данных для уверенной проверки",
-        "Загрузите более чёткое фото/скан, по возможности все страницы, чтобы были видны подписи/печати и полный адрес.",
+        "Загрузите более чёткий файл (желательно все страницы) — чтобы были видны подписи/печати и полный адрес.",
         "major"
       );
       if (!json.message) {
