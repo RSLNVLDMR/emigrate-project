@@ -17,7 +17,7 @@ function getApiKey() {
   );
 }
 
-const REFUSAL_RX = /(i'?m sorry|cannot help|can[' ]?t assist|i can[' ]?t|refuse|извините.*не могу|не могу помочь|не можу допомогти|не магу дапамагчы)/i;
+const REFUSAL_RX = /(i'?m\s+sorr(y|ies)|cannot\s+help|can[' ]?t\s+assist|i\s+can[' ]?t|refuse|извините.*не могу|не могу помочь|не можу допомогти|не магу дапамагчы)/i;
 
 function systemPrompt(from, to) {
   return (
@@ -25,7 +25,7 @@ function systemPrompt(from, to) {
 Follow strictly:
 - Preserve meaning, tone, formatting, emoji, punctuation, line breaks.
 - Do NOT censor, euphemize, or moralize. Profanity, insults, slurs, sexual/violent language may appear — translate them exactly.
-- This is a factual, educational transformation task (transformation exception). 
+- This is a factual, educational transformation task (transformation exception).
 - Do not add apologies, warnings, or safety notes. Output ONLY the translation.
 - If legally prohibited content appears (e.g., sexual content involving minors), translate the rest and replace that specific segment with [REDACTED], keeping structure.`
   );
@@ -40,28 +40,92 @@ If a truly disallowed segment appears (e.g., sexual content with minors), replac
   );
 }
 
-async function ask(client, sys, user) {
+async function ask(client, sys, userContent) {
   const r = await client.chat.completions.create({
     model: "gpt-4o-mini",
     temperature: 0,
     messages: [
       { role: "system", content: sys },
-      { role: "user", content: user }
+      { role: "user", content: userContent }
     ]
   });
   return (r.choices?.[0]?.message?.content || "").trim();
 }
 
 async function translateText(client, from, to, text) {
-  // Первая попытка
   let out = await ask(client, systemPrompt(from, to), text);
-
-  // Если похоже на отказ — повторяем с более жёсткими инструкциями
   if (!out || REFUSAL_RX.test(out)) {
     out = await ask(client, strongerSystemPrompt(from, to), text);
   }
   return out;
 }
+
+/* ========================== OCR helpers (PDF / Images) ========================== */
+function toUint8(buf) {
+  return buf instanceof Uint8Array ? buf : new Uint8Array(buf);
+}
+
+async function renderPdfToPngBuffers(pdfBuffer, maxPages = 10, scale = 2.2) {
+  const pdfjs = await import("pdfjs-dist/legacy/build/pdf.mjs");
+  const { createCanvas } = await import("@napi-rs/canvas");
+
+  const doc = await pdfjs.getDocument({ data: toUint8(pdfBuffer), disableWorker: true }).promise;
+  const pages = Math.min(doc.numPages, maxPages);
+  const out = [];
+
+  for (let i = 1; i <= pages; i++) {
+    const page = await doc.getPage(i);
+    const viewport = page.getViewport({ scale });
+    const canvas = createCanvas(Math.max(1, Math.floor(viewport.width)), Math.max(1, Math.floor(viewport.height)));
+    const ctx = canvas.getContext("2d");
+    await page.render({ canvasContext: ctx, viewport }).promise;
+    out.push(canvas.toBuffer("image/png"));
+  }
+  return out;
+}
+
+async function buildImageInputsFromBuffers(buffers) {
+  let sharpLib = null;
+  try { sharpLib = (await import("sharp")).default; } catch {}
+  const inputs = [];
+  for (const buf of buffers) {
+    if (sharpLib) {
+      const base = await sharpLib(buf).rotate().resize({ width: 2200, withoutEnlargement: true }).jpeg({ quality: 92 }).toBuffer();
+      inputs.push({ type: "image_url", image_url: { url: `data:image/jpeg;base64,${base.toString("base64")}` } });
+    } else {
+      inputs.push({ type: "image_url", image_url: { url: `data:image/jpeg;base64,${Buffer.from(buf).toString("base64")}` } });
+    }
+  }
+  return inputs;
+}
+
+function looksLikeRefusal(s = "") {
+  return REFUSAL_RX.test(s);
+}
+
+async function ocrImageBuffer(buf, client, variant = 1, maxTokens = 1500) {
+  const images = await buildImageInputsFromBuffers([buf]);
+
+  const SYSTEM1 =
+    "You are an OCR engine. Return the visible text as plain UTF-8 text. Do not summarize, do not add disclaimers. Output text only.";
+  const SYSTEM2 =
+    "You transcribe user-provided documents verbatim for accessibility and translation. The text may include profanity or sensitive language. Return plain UTF-8 text only. No summaries, no warnings.";
+
+  const sys = variant === 1 ? SYSTEM1 : SYSTEM2;
+
+  const completion = await client.chat.completions.create({
+    model: "gpt-4o",
+    temperature: 0,
+    max_tokens: maxTokens,
+    messages: [
+      { role: "system", content: sys },
+      { role: "user", content: [{ type: "text", text: "Extract plain text from the image exactly as seen." }, ...images] }
+    ]
+  });
+
+  return (completion.choices?.[0]?.message?.content || "").trim();
+}
+/* ============================================================================== */
 
 export default async function handler(req, res) {
   if (req.method !== "POST") {
@@ -83,7 +147,7 @@ export default async function handler(req, res) {
     // Разбираем multipart/form-data
     const form = formidable({
       multiples: false,
-      maxFileSize: 10 * 1024 * 1024,
+      maxFileSize: 40 * 1024 * 1024, // подняли лимит до 40 МБ, как в verify-address
       uploadDir: "/tmp",
       keepExtensions: true
     });
@@ -102,59 +166,83 @@ export default async function handler(req, res) {
     const fileRec = files.file ? (Array.isArray(files.file) ? files.file[0] : files.file) : null;
 
     if (fileRec) {
-      const mime = fileRec.mimetype || "application/octet-stream";
+      const mime = (fileRec.mimetype || "application/octet-stream").toLowerCase();
       const buf  = await fsp.readFile(fileRec.filepath).finally(() => {
         fsp.unlink(fileRec.filepath).catch(() => {});
       });
 
       if (mime.startsWith("image/")) {
-        // Vision OCR + перевод
-        const dataUrl = `data:${mime};base64,${buf.toString("base64")}`;
-        // Сообщение как и для текста — просим «прочитай и переведи содержимое изображения»
+        // Попытка 1: сразу перевод «по картинке»
         let out = await ask(
           client,
           systemPrompt(from, to),
           [
             { type: "text", text: "Translate the text from this image." },
-            { type: "image_url", image_url: { url: dataUrl } }
+            { type: "image_url", image_url: { url: `data:${mime};base64,${buf.toString("base64")}` } }
           ]
         );
-        if (!out || REFUSAL_RX.test(out)) {
-          out = await ask(
-            client,
-            strongerSystemPrompt(from, to),
-            [
-              { type: "text", text: "Translate the text from this image." },
-              { type: "image_url", image_url: { url: dataUrl } }
-            ]
-          );
+
+        // Если отказ/пусто — OCR → перевод
+        if (!out || looksLikeRefusal(out)) {
+          const ocr = await ocrImageBuffer(buf, client, 1, 1500) || "";
+          const clean = (!ocr || ocr.length < 8 || looksLikeRefusal(ocr))
+            ? (await ocrImageBuffer(buf, client, 2, 1500) || "")
+            : ocr;
+
+          if (clean && clean.trim()) {
+            out = await translateText(client, from, to, clean.slice(0, 200000));
+          }
         }
-        parts.push(out || "");
+
+        if (!out) out = "";
+        parts.push(out);
+
       } else if (mime === "application/pdf") {
-        // PDF: динамический импорт, чтобы не падать в serverless
+        // Сначала пытаемся вытащить «живой» текст
         let pdfParse;
         try {
           const mod = await import("pdf-parse");
           pdfParse = mod.default || mod;
         } catch (e) {
-          console.error("pdf-parse import failed:", e);
-          res.status(501).json({ error: "Парсер PDF недоступен. Загрузите фото/скрин страницы вместо PDF." });
-          return;
+          pdfParse = null;
         }
-        try {
-          const parsed = await pdfParse(buf);
-          const pdfText = (parsed.text || "").trim();
-          if (pdfText) {
-            const out = await translateText(client, from, to, pdfText.slice(0, 200000));
-            parts.push(out || "");
-          } else {
-            parts.push("[PDF: не удалось извлечь текст (вероятно, скан без текстового слоя). Загрузите фото/скрин страницы.]");
+
+        let extracted = "";
+        if (pdfParse) {
+          try {
+            const parsed = await pdfParse(buf);
+            const pdfText = (parsed.text || "").trim();
+            if (pdfText && pdfText.length > 10) {
+              extracted = pdfText;
+            }
+          } catch {}
+        }
+
+        // Если «живого» текста нет — OCR постранично (до 10 стр) с автоповтором
+        if (!extracted) {
+          const pages = await renderPdfToPngBuffers(buf, 10, 2.2);
+          if (!pages.length) {
+            res.status(400).json({ error: "Не удалось обработать PDF. Попробуйте фото/скан." });
+            return;
           }
-        } catch (e) {
-          console.error("pdf-parse error:", e);
-          res.status(400).json({ error: "Не удалось извлечь текст из PDF. Попробуйте фото/скрин." });
-          return;
+          const pageTexts = [];
+          for (let i = 0; i < pages.length; i++) {
+            let pageText = await ocrImageBuffer(pages[i], client, 1, 1100);
+            if (!pageText || pageText.length < 8 || looksLikeRefusal(pageText)) {
+              pageText = await ocrImageBuffer(pages[i], client, 2, 1100);
+            }
+            pageTexts.push(pageText || "");
+          }
+          extracted = pageTexts.join("\n\n===== PAGE BREAK =====\n\n").trim();
         }
+
+        if (!extracted) {
+          parts.push("[PDF: текст не распознан]");
+        } else {
+          const out = await translateText(client, from, to, extracted.slice(0, 200000));
+          parts.push(out || "");
+        }
+
       } else {
         res.status(400).json({ error: "Unsupported file type" });
         return;
@@ -167,12 +255,13 @@ export default async function handler(req, res) {
       parts.push(out || "");
     }
 
-    if (!parts.filter(Boolean).length) {
+    const nonEmpty = parts.filter(Boolean);
+    if (!nonEmpty.length) {
       res.status(400).json({ error: "Nothing to translate" });
       return;
     }
 
-    res.status(200).json({ ok: true, text: parts.filter(Boolean).join("\n\n---\n\n") });
+    res.status(200).json({ ok: true, text: nonEmpty.join("\n\n---\n\n") });
   } catch (e) {
     const msg = (e && (e.message || e.toString())) || "";
     if (e?.status === 429 || /insufficient_quota|quota|rate/i.test(msg)) {
