@@ -310,7 +310,7 @@ async function buildImageInputsFromBuffers(buffers) {
   return inputs;
 }
 
-async function renderPdfToPngBuffers(pdfBuffer, maxPages = 3, scale = 2.4) {
+async function renderPdfToPngBuffers(pdfBuffer, maxPages = 3, scale = 2.6) {
   const pdfjs = await import("pdfjs-dist/legacy/build/pdf.mjs");
   const { createCanvas } = await import("@napi-rs/canvas");
   const doc = await pdfjs.getDocument({ data: pdfBuffer, disableWorker: true }).promise;
@@ -368,6 +368,7 @@ export default async function handler(req, res) {
 
     const baseInstruction = `
 Ты — строгий верификатор подтверждений адреса в Польше.
+Работай на польских/русских документах. Если информации недостаточно, всё равно дай заключение и перечисли причины (не используй уклончивые ответы).
 1) Выполни OCR и извлечение данных (даже если изображение длинное и содержит несколько страниц).
 2) Определи вид документа и пригодность (is_proof_of_address).
 3) Заполни fieldsExtracted и выяви ошибки по правилам ниже.
@@ -395,7 +396,7 @@ ${OUTPUT_SPEC}
         try {
           const parsed = await pdfParse(buf);
           const pdfText = (parsed.text || "").trim();
-          if (pdfText && pdfText.length > 120) {
+          if (pdfText && pdfText.length > 40) {
             messages = [
               { role: "system", content: baseInstruction },
               { role: "user", content: `OCR-текст из PDF (фрагмент):\n\n${pdfText.slice(0, 30000)}` },
@@ -407,7 +408,7 @@ ${OUTPUT_SPEC}
 
       if (!textOk) {
         // 2) PDF-скан → до 3 страниц в Vision
-        const pageBuffers = await renderPdfToPngBuffers(buf, 3, 2.4);
+        const pageBuffers = await renderPdfToPngBuffers(buf, 3, 2.6);
         if (!pageBuffers.length) {
           res.status(400).json({ error: "Не удалось обработать PDF. Загрузите фото/скан." });
           return;
@@ -461,6 +462,24 @@ ${OUTPUT_SPEC}
         fieldsExtracted: {},
         raw_text_excerpt: null,
       };
+    }
+
+    // Если модель уклонилась — превращаем в FAIL с понятной причиной
+    if (!json || json.verdict === "uncertain") {
+      json = json || {};
+      json.is_proof_of_address = false;
+      json.verdict = "fail";
+      json.errors = Array.isArray(json.errors) ? json.errors : [];
+      addError(
+        json.errors,
+        "low_quality",
+        "Недостаточно данных для уверенной проверки",
+        "Загрузите более чёткое фото/скан, по возможности все страницы, чтобы были видны подписи/печати и полный адрес.",
+        "major"
+      );
+      if (!json.message) {
+        json.message = "Не удалось уверенно определить корректность документа.";
+      }
     }
 
     const finalJson = ruleCheck(docType, json);
