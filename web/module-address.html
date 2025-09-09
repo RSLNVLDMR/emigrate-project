@@ -118,6 +118,9 @@
   </div>
 </div>
 
+<!-- Клиентский PDF-фоллбэк: рендер первой страницы PDF в PNG -->
+<script src="./pdf-client-fallback.js" defer></script>
+
 <script>
 (function(){
   const $ = (s,r=document)=>r.querySelector(s);
@@ -228,14 +231,17 @@
 
   // ===== check =====
   $("#checkBtn").onclick = async ()=>{
-    if(!chosenFile){
+    // берём файл из клиентского PDF-фоллбэка (PNG для PDF) либо исходный
+    const uploadFile = (window.emgrGetUploadFile && window.emgrGetUploadFile()) || chosenFile;
+
+    if(!uploadFile){
       alert("Сначала загрузите файл.");
       return;
     }
     const docType = $("#docType").value || "other";
     const fd = new FormData();
     fd.append("docType", docType);
-    fd.append("file", chosenFile);
+    fd.append("file", uploadFile, uploadFile.name || "document");
 
     $("#checkBtn").disabled = true;
     setStatus("checking","Проверяем…");
