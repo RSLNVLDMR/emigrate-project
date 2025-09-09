@@ -117,7 +117,6 @@ function containsAny(str = "", words = []) {
   return words.some((w) => low.includes(w));
 }
 function addError(arr, code, title, detail, severity = "major") {
-  // защита от дублей по коду/заголовку
   const keyCode = norm(code);
   const keyTitle = norm(title);
   if ((arr || []).some((e) => norm(e.code) === keyCode || norm(e.title) === keyTitle)) return;
@@ -152,7 +151,7 @@ function unifyExpiryErrors(errors, vTo) {
           severity: "critical",
         };
       }
-      continue; // остальные «про срок» отбрасываем
+      continue;
     }
     kept.push(e);
   }
@@ -170,7 +169,6 @@ function ruleCheck(docType, modelJson) {
   const docDate = parseDate(f.doc_date);
   const vTo = parseDate(f.valid_to);
 
-  // 1) Базовая проверка типа
   if (out.is_proof_of_address === false) {
     addError(
       out.errors,
@@ -181,7 +179,6 @@ function ruleCheck(docType, modelJson) {
     );
   }
 
-  // 2) Сроки: одно «человеческое» сообщение при наличии valid_to
   if (vTo && vTo < TODAY) {
     addError(
       out.errors,
@@ -192,7 +189,6 @@ function ruleCheck(docType, modelJson) {
     );
     out.errors = unifyExpiryErrors(out.errors, vTo);
   } else if (!vTo && docDate && monthsDiff(docDate, TODAY) > 12) {
-    // Нет valid_to — отдельная проверка «документ устарел»
     addError(
       out.errors,
       "too_old",
@@ -202,7 +198,6 @@ function ruleCheck(docType, modelJson) {
     );
   }
 
-  // 3) Тип-специфика (дружелюбные тексты)
   const title = norm(out.doc_kind || "");
   const issuer = norm(f.issuer || "");
 
@@ -250,7 +245,7 @@ function ruleCheck(docType, modelJson) {
         out.errors,
         "not_okazjonalna",
         "Не видно признаков najmu okazjonalnego",
-        "Должны быть: нотариальное заявление, адрес «na wypadek» и согласие владельца.",
+        "Должны быть: нотариальное заявление, адрес «на wypadek» и согласие владельца.",
         "major"
       );
   }
@@ -269,7 +264,6 @@ function ruleCheck(docType, modelJson) {
       );
   }
 
-  // Итоговый вердикт
   const hasCritical = out.errors.some((e) => e.severity === "critical");
   const hasMajor = out.errors.some((e) => e.severity === "major");
 
@@ -291,29 +285,20 @@ function ruleCheck(docType, modelJson) {
 }
 
 /* ---------- Вспомогательные функции для изображений и PDF ---------- */
-
-// Делает 1–2 варианта картинки (ориг + улучшенный), если есть sharp.
-// Возвращает массив объектов content для Chat Vision (image_url data: URL).
 async function buildImageInputsFromBuffers(buffers) {
   let sharpLib = null;
   try {
     sharpLib = (await import("sharp")).default;
-  } catch {
-    // sharp отсутствует — отправим как есть
-  }
-
+  } catch {}
   const inputs = [];
   for (const buf of buffers) {
     if (sharpLib) {
-      // Ограничим ширину, нормализуем, шарпим
       const base = await sharpLib(buf)
         .rotate()
-        .resize({ width: 2000, withoutEnlargement: true })
+        .resize({ width: 2400, withoutEnlargement: true })
         .jpeg({ quality: 92 })
         .toBuffer();
-
       const enhanced = await sharpLib(base).grayscale().normalize().sharpen().jpeg({ quality: 95 }).toBuffer();
-
       inputs.push(
         { type: "image_url", image_url: { url: `data:image/jpeg;base64,${base.toString("base64")}` } },
         { type: "image_url", image_url: { url: `data:image/jpeg;base64,${enhanced.toString("base64")}` } }
@@ -325,16 +310,12 @@ async function buildImageInputsFromBuffers(buffers) {
   return inputs;
 }
 
-// Рендер первых N страниц PDF в PNG-буферы через pdfjs + @napi-rs/canvas
-async function renderPdfToPngBuffers(pdfBuffer, maxPages = 2, scale = 2) {
+async function renderPdfToPngBuffers(pdfBuffer, maxPages = 3, scale = 2.4) {
   const pdfjs = await import("pdfjs-dist/legacy/build/pdf.mjs");
   const { createCanvas } = await import("@napi-rs/canvas");
-
-  // В Node серверлес воркер не нужен
   const doc = await pdfjs.getDocument({ data: pdfBuffer, disableWorker: true }).promise;
   const pages = Math.min(doc.numPages, maxPages);
   const out = [];
-
   for (let i = 1; i <= pages; i++) {
     const page = await doc.getPage(i);
     const viewport = page.getViewport({ scale });
@@ -346,7 +327,7 @@ async function renderPdfToPngBuffers(pdfBuffer, maxPages = 2, scale = 2) {
   return out;
 }
 
-/* ---------- Основной обработчик (визион + pdf-ocr) ---------- */
+/* ---------- Основной обработчик ---------- */
 export default async function handler(req, res) {
   if (req.method !== "POST") {
     res.status(405).json({ error: "Method not allowed" });
@@ -361,7 +342,6 @@ export default async function handler(req, res) {
   const client = new OpenAI({ apiKey });
 
   try {
-    // multipart/form-data
     const form = formidable({
       multiples: false,
       maxFileSize: 10 * 1024 * 1024,
@@ -388,72 +368,64 @@ export default async function handler(req, res) {
 
     const baseInstruction = `
 Ты — строгий верификатор подтверждений адреса в Польше.
-1) СНАЧАЛА распознай текст (OCR), затем определи вид документа.
-2) Скажи, является ли он ПРИГОДНЫМ подтверждением адреса ЗДЕСЬ И СЕЙЧАС (is_proof_of_address).
+1) Выполни OCR и извлечение данных (даже если изображение длинное и содержит несколько страниц).
+2) Определи вид документа и пригодность (is_proof_of_address).
 3) Заполни fieldsExtracted и выяви ошибки по правилам ниже.
-4) Верни ответ СТРОГО по JSON-схеме (response_format json_object).
+4) Верни ответ СТРОГО по JSON-схеме.
 Правила:
 ${RULES.common}
 Специфика типа "${docType}":
 ${RULES[docType] || RULES.other}
-Если документ похож, но не дотягивает до требований (нет печати/подписей/истёк срок) — это не proof (is_proof_of_address=false) и добавь соответствующие ошибки.
+Если документ похож, но не дотягивает до требований (нет печати/подписей/истёк срок) — это не proof и добавь соответствующие ошибки.
 ${OUTPUT_SPEC}
 `.trim();
 
     let messages;
 
     if (mime === "application/pdf") {
-      // 1) пробуем вытащить текст
+      // 1) пробуем вытянуть «живой» текст
       let pdfParse;
       try {
         const mod = await import("pdf-parse");
         pdfParse = mod.default || mod;
-      } catch {
-        pdfParse = null;
-      }
+      } catch { pdfParse = null; }
 
       let textOk = false;
       if (pdfParse) {
         try {
           const parsed = await pdfParse(buf);
           const pdfText = (parsed.text || "").trim();
-          if (pdfText && pdfText.length > 50) {
-            // есть «живой» текст — отправляем как текст
+          if (pdfText && pdfText.length > 120) {
             messages = [
               { role: "system", content: baseInstruction },
-              { role: "user", content: `OCR-текст из PDF:\n\n${pdfText.slice(0, 20000)}` },
+              { role: "user", content: `OCR-текст из PDF (фрагмент):\n\n${pdfText.slice(0, 30000)}` },
             ];
             textOk = true;
           }
-        } catch {
-          // пойдём на OCR
-        }
+        } catch {}
       }
 
       if (!textOk) {
-        // 2) PDF-скан — рендерим 1–2 страницы и отправляем Vision
-        const pageBuffers = await renderPdfToPngBuffers(buf, 2, 2); // до 2 страниц
+        // 2) PDF-скан → до 3 страниц в Vision
+        const pageBuffers = await renderPdfToPngBuffers(buf, 3, 2.4);
         if (!pageBuffers.length) {
-          res.status(400).json({ error: "Не удалось обработать PDF. Загрузите фото/скрин." });
+          res.status(400).json({ error: "Не удалось обработать PDF. Загрузите фото/скан." });
           return;
         }
         const imageInputs = await buildImageInputsFromBuffers(pageBuffers);
-
         messages = [
           { role: "system", content: baseInstruction },
           {
             role: "user",
             content: [
-              { type: "text", text: "Проанализируй документ на изображениях (1–2 страницы). Верни СТРОГО JSON." },
+              { type: "text", text: "На изображениях — первые страницы документа. Извлеки данные и оцени пригодность. Верни СТРОГО JSON." },
               ...imageInputs,
             ],
           },
         ];
       }
     } else if (mime.startsWith("image/")) {
-      // Фото: делаем варианты и отправляем Vision
       const imageInputs = await buildImageInputsFromBuffers([buf]);
-
       messages = [
         { role: "system", content: baseInstruction },
         {
@@ -473,7 +445,7 @@ ${OUTPUT_SPEC}
       model: "gpt-4o",
       response_format: { type: "json_object" },
       messages,
-      temperature: 0.1,
+      temperature: 0.0,
     });
 
     let json;
