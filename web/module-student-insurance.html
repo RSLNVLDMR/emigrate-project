@@ -1,0 +1,214 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8" />
+  <title data-i18n="student_insurance_title">Страховка для студентов — eMigrant</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <script src="https://telegram.org/js/telegram-web-app.js"></script>
+  <link rel="stylesheet" href="./styles.css" />
+  <style>
+    .lang{position:relative;z-index:5}
+    .footer{position:sticky;bottom:0;z-index:4}
+    button,.btn,select,input,textarea{pointer-events:auto;touch-action:manipulation;-webkit-tap-highlight-color:transparent}
+    .requirement-item {
+      background: #f8f9fa;
+      border-left: 4px solid #007bff;
+      padding: 12px;
+      margin: 8px 0;
+      border-radius: 4px;
+    }
+    .requirement-item.important {
+      border-left-color: #dc3545;
+      background: #fff5f5;
+    }
+    .requirement-item.success {
+      border-left-color: #28a745;
+      background: #f0fff4;
+    }
+    .coverage-highlight {
+      background: #e7f3ff;
+      border: 1px solid #b3d9ff;
+      border-radius: 8px;
+      padding: 16px;
+      margin: 12px 0;
+      text-align: center;
+      font-weight: bold;
+      font-size: 16px;
+      color: #0066cc;
+    }
+    .document-type {
+      background: #f8f9fa;
+      border: 1px solid #dee2e6;
+      border-radius: 8px;
+      padding: 16px;
+      margin: 12px 0;
+    }
+    .document-type h4 {
+      margin: 0 0 12px 0;
+      color: #495057;
+      font-size: 16px;
+    }
+    .document-list {
+      margin: 8px 0;
+      padding-left: 20px;
+    }
+  </style>
+</head>
+<body>
+<div class="screen">
+  <div class="container">
+    <div class="header">
+      <div class="h1" data-i18n="student_insurance_title">Страховка для студентов</div>
+      <div class="lang">
+        <button data-lang="ru" class="active">RU</button>
+        <button data-lang="ua">UA</button>
+        <button data-lang="by">BY</button>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="h2" data-i18n="student_insurance_what_title">Что это такое</div>
+      <p class="p" data-i18n="student_insurance_what_text">Медицинская страховка для студентов - это обязательное требование для подачи на карту побыту по учебе. Страховка должна покрывать все медицинские расходы на период рассмотрения заявления.</p>
+      
+      <div class="coverage-highlight">
+        <div data-i18n="student_insurance_coverage_title">🏥 Покрытие страховки:</div>
+        <div data-i18n="student_insurance_coverage_text">Врач, госпитализация, неотложная помощь, транспорт, репатриация</div>
+      </div>
+
+      <div class="h2" data-i18n="student_insurance_requirements_title">Требования к страховке</div>
+      
+      <div class="requirement-item important">
+        <strong data-i18n="student_insurance_req_mandatory_title">📋 Обязательность:</strong>
+        <p data-i18n="student_insurance_req_mandatory_text">Обязательна для всех студентов без исключения</p>
+      </div>
+
+      <div class="requirement-item important">
+        <strong data-i18n="student_insurance_req_period_title">📅 Период действия:</strong>
+        <p data-i18n="student_insurance_req_period_text">Должна действовать на весь период рассмотрения заявления (минимум 1 год)</p>
+      </div>
+
+      <div class="requirement-item important">
+        <strong data-i18n="student_insurance_req_amount_title">💰 Минимальная сумма покрытия:</strong>
+        <p data-i18n="student_insurance_req_amount_text">30 000 € (евро)</p>
+      </div>
+
+      <div class="requirement-item">
+        <strong data-i18n="student_insurance_req_language_title">🌐 Язык документа:</strong>
+        <p data-i18n="student_insurance_req_language_text">Полис должен быть на польском языке или с присяжным переводом</p>
+      </div>
+
+      <div class="requirement-item success">
+        <strong data-i18n="student_insurance_req_quality_title">📄 Качество документа:</strong>
+        <p data-i18n="student_insurance_req_quality_text">Четкий скан или фото, все данные читаемы, документ не поврежден</p>
+      </div>
+    </div>
+
+    <div class="card" style="margin-top:12px">
+      <div class="h2" data-i18n="student_insurance_documents_title">Какие документы подать</div>
+      <p class="p" data-i18n="student_insurance_documents_text">В зависимости от типа страховки, необходимо предоставить следующие документы:</p>
+      
+      <div class="document-type">
+        <h4 data-i18n="student_insurance_private_title">🏥 Частная страховка (PZU, Allianz, AXA/UNIQA, Wiener, Compensa, Signal Iduna):</h4>
+        <ul class="document-list">
+          <li data-i18n="student_insurance_private_policy">Копия полиса (Polisa ubezpieczeniowa)</li>
+          <li data-i18n="student_insurance_private_payment">Подтверждение оплаты (Potwierdzenie opłaty składki)</li>
+          <li data-i18n="student_insurance_private_translation">Перевод на польский (если иностранный полис)</li>
+        </ul>
+      </div>
+
+      <div class="document-type">
+        <h4 data-i18n="student_insurance_nfz_title">🏛️ Добровольное страхование в NFZ (Narodowy Fundusz Zdrowia):</h4>
+        <ul class="document-list">
+          <li data-i18n="student_insurance_nfz_contract">Договор с NFZ (Umowa dobrowolnego ubezpieczenia zdrowotnego)</li>
+          <li data-i18n="student_insurance_nfz_receipts">Квитанции об оплате взносов (Potwierdzenie przelewu składki)</li>
+        </ul>
+      </div>
+
+      <div class="document-type">
+        <h4 data-i18n="student_insurance_zus_title">🏢 Страхование через ZUS (Zakład Ubezpieczeń Społecznych):</h4>
+        <ul class="document-list">
+          <li data-i18n="student_insurance_zus_certificate">Справка о регистрации в системе (Zaświadczenie o zgłoszeniu do ubezpieczenia zdrowotnego)</li>
+          <li data-i18n="student_insurance_zus_declaration">Или декларация от работодателя/родителя (Deklaracja ZUS RCA)</li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="card" style="margin-top:12px">
+      <div class="h2" data-i18n="student_insurance_how_title">Как получить справку с ZUS если ты работаешь</div>
+      <ol class="p">
+        <li data-i18n="student_insurance_zus_step1">Обратитесь к своему работодателю с просьбой о регистрации в ZUS</li>
+        <li data-i18n="student_insurance_zus_step2">Работодатель подает заявление ZUS ZUA в течение 7 дней с начала работы</li>
+        <li data-i18n="student_insurance_zus_step3">После регистрации получите справку о регистрации в системе ZUS</li>
+        <li data-i18n="student_insurance_zus_step4">Альтернативно: родитель может подать декларацию ZUS RCA</li>
+        <li data-i18n="student_insurance_zus_step5">Убедитесь, что справка содержит все необходимые данные</li>
+        <li data-i18n="student_insurance_zus_step6">Переведите документ на польский язык (если нужно)</li>
+      </ol>
+    </div>
+
+    <div class="card" style="margin-top:12px">
+      <div class="h2" data-i18n="student_insurance_errors_title">Частые ошибки</div>
+      <ul class="p">
+        <li data-i18n="student_insurance_error1">Недостаточная сумма покрытия (менее 30 000 €)</li>
+        <li data-i18n="student_insurance_error2">Страховка действует менее 1 года</li>
+        <li data-i18n="student_insurance_error3">Документы не переведены на польский язык</li>
+        <li data-i18n="student_insurance_error4">Отсутствует подтверждение оплаты</li>
+        <li data-i18n="student_insurance_error5">Нечитаемое качество скана или фото</li>
+        <li data-i18n="student_insurance_error6">Страховка не покрывает все необходимые услуги</li>
+      </ul>
+    </div>
+
+    <div class="card" style="margin-top:12px; margin-bottom: 80px;">
+      <button class="btn full" onclick="alert(t('student_insurance_ai_coming_soon') || 'Модуль проверки AI будет добавлен в следующей версии')" data-i18n="student_insurance_ai_button">🤖 Проверить страховку с AI</button>
+    </div>
+  </div>
+
+  <div class="tabs">
+    <a class="tab" href="./translator.html" data-i18n="nav_translator">Переводчик</a>
+    <a class="tab" href="./checklist.html" data-i18n="nav_checklist">Чеклист</a>
+    <a class="tab" href="./consultant.html" data-i18n="nav_consultant">Консультант</a>
+  </div>
+</div>
+
+<script>
+(function(){
+  const $ = (s,r=document)=>r.querySelector(s);
+  const $$ = (s,r=document)=>Array.from(r.querySelectorAll(s));
+  const storage = { get(k,d=null){try{return JSON.parse(localStorage.getItem(k))??d}catch{return d}}, set(k,v){localStorage.setItem(k,JSON.stringify(v))} };
+
+  // i18n
+  const i18n = {
+    lang: storage.get('lang','ru'),
+    dict:{},
+    async load(lang){
+      const use = lang || i18n.lang;
+      try{
+        const res = await fetch(`./i18n/${use}.json`, {cache:'no-store'});
+        if(res.ok){ i18n.dict = await res.json(); i18n.lang = use; storage.set('lang',use); }
+      }catch(e){}
+      apply(); highlightLang();
+    }
+  };
+  const t = (k)=> i18n.dict[k] || k;
+  function apply(){
+    $$('[data-i18n]').forEach(el=>{
+      const k = el.getAttribute('data-i18n');
+      if(i18n.dict[k]) el.textContent = i18n.dict[k];
+    });
+    document.documentElement.setAttribute('lang', i18n.lang);
+  }
+  function highlightLang(){ $$('.lang button').forEach(b=> b.classList.toggle('active', b.dataset.lang===i18n.lang)); }
+  function bindLang(){ $$('.lang button').forEach(b=> b.onclick = ()=> i18n.load(b.dataset.lang)); }
+
+  // Telegram
+  (function(){ const tg=window.Telegram&&window.Telegram.WebApp; if(!tg) return; tg.expand(); tg.ready(); })();
+
+  async function boot(){
+    bindLang();
+    await i18n.load(storage.get('lang','ru'));
+  }
+  document.addEventListener('DOMContentLoaded', boot);
+  window.addEventListener('pageshow', boot);
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,276 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8" />
+  <title data-i18n="ukr_pesel_title">UKR PESEL — eMigrant</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <script src="https://telegram.org/js/telegram-web-app.js"></script>
+  <link rel="stylesheet" href="./styles.css" />
+  <style>
+    .lang{position:relative;z-index:5}
+    .footer{position:sticky;bottom:0;z-index:4}
+    button,.btn,select,input,textarea{pointer-events:auto;touch-action:manipulation;-webkit-tap-highlight-color:transparent}
+    .requirement-item {
+      background: #f8f9fa;
+      border-left: 4px solid #007bff;
+      padding: 12px;
+      margin: 8px 0;
+      border-radius: 4px;
+    }
+    .requirement-item.important {
+      border-left-color: #dc3545;
+      background: #fff5f5;
+    }
+    .requirement-item.success {
+      border-left-color: #28a745;
+      background: #f0fff4;
+    }
+    .ukr-highlight {
+      background: #e7f3ff;
+      border: 1px solid #b3d9ff;
+      border-radius: 8px;
+      padding: 16px;
+      margin: 12px 0;
+      text-align: center;
+      font-weight: bold;
+      font-size: 16px;
+      color: #0066cc;
+    }
+    .method-card {
+      background: #f8f9fa;
+      border: 1px solid #dee2e6;
+      border-radius: 8px;
+      padding: 16px;
+      margin: 12px 0;
+    }
+    .method-card h4 {
+      margin: 0 0 12px 0;
+      color: #495057;
+      font-size: 16px;
+    }
+    .document-list {
+      margin: 8px 0;
+      padding-left: 20px;
+    }
+    .timeline {
+      background: #f8f9fa;
+      border-left: 4px solid #007bff;
+      padding: 16px;
+      margin: 12px 0;
+      border-radius: 4px;
+    }
+    .timeline h4 {
+      margin: 0 0 12px 0;
+      color: #007bff;
+    }
+  </style>
+</head>
+<body>
+<div class="screen">
+  <div class="container">
+    <div class="header">
+      <div class="h1" data-i18n="ukr_pesel_title">UKR PESEL</div>
+      <div class="lang">
+        <button data-lang="ru" class="active">RU</button>
+        <button data-lang="ua">UA</button>
+        <button data-lang="by">BY</button>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="h2" data-i18n="ukr_pesel_what_title">Что это такое</div>
+      <p class="p" data-i18n="ukr_pesel_what_text">Подтверждение статуса UKR — это заświadczenie о PESEL с пометкой UKR. Это официальный документ, подтверждающий ваш статус беженца в Польше и необходимый для подачи на карту побыту CUKR.</p>
+      
+      <div class="ukr-highlight">
+        <div data-i18n="ukr_pesel_highlight_title">🏛️ Кто выдает справку:</div>
+        <div data-i18n="ukr_pesel_highlight_text">Urząd Gminy / Urząd Miasta (отдел ewidencja ludności)</div>
+      </div>
+
+      <div class="h2" data-i18n="ukr_pesel_requirements_title">Требования к справке</div>
+      
+      <div class="requirement-item important">
+        <strong data-i18n="ukr_pesel_req_type_title">📋 Тип документа:</strong>
+        <p data-i18n="ukr_pesel_req_type_text">Заświadczenie о PESEL с пометкой UKR</p>
+      </div>
+
+      <div class="requirement-item important">
+        <strong data-i18n="ukr_pesel_req_purpose_title">🎯 Цель в заявлении:</strong>
+        <p data-i18n="ukr_pesel_req_purpose_text">Обязательно указать: "для карты pobytu CUKR"</p>
+      </div>
+
+      <div class="requirement-item">
+        <strong data-i18n="ukr_pesel_req_fee_title">💰 Госпошлина:</strong>
+        <p data-i18n="ukr_pesel_req_fee_text">17 zł (квитанция об оплате обязательна)</p>
+      </div>
+
+      <div class="requirement-item">
+        <strong data-i18n="ukr_pesel_req_speed_title">⏰ Срок получения:</strong>
+        <p data-i18n="ukr_pesel_req_speed_text">До 7 дней, часто в день обращения</p>
+      </div>
+
+      <div class="requirement-item success">
+        <strong data-i18n="ukr_pesel_req_quality_title">📄 Качество документа:</strong>
+        <p data-i18n="ukr_pesel_req_quality_text">Четкий скан или фото, все данные читаемы, документ не поврежден</p>
+      </div>
+    </div>
+
+    <div class="card" style="margin-top:12px">
+      <div class="h2" data-i18n="ukr_pesel_how_title">Как получить справку</div>
+      <p class="p" data-i18n="ukr_pesel_how_text">Есть несколько способов получения справки UKR PESEL:</p>
+      
+      <div class="method-card">
+        <h4 data-i18n="ukr_pesel_method1_title">👤 Лично в уженде:</h4>
+        <ul class="document-list">
+          <li data-i18n="ukr_pesel_method1_step1">Прийти в Urząd Gminy/Miasta</li>
+          <li data-i18n="ukr_pesel_method1_step2">Найти отдел "ewidencja ludności"</li>
+          <li data-i18n="ukr_pesel_method1_step3">Подать заявление и документы</li>
+          <li data-i18n="ukr_pesel_method1_step4">Оплатить госпошлину 17 zł</li>
+          <li data-i18n="ukr_pesel_method1_step5">Получить справку (часто в тот же день)</li>
+        </ul>
+      </div>
+
+      <div class="method-card">
+        <h4 data-i18n="ukr_pesel_method2_title">💻 Онлайн через ePUAP:</h4>
+        <ul class="document-list">
+          <li data-i18n="ukr_pesel_method2_step1">Войти в ePUAP с Profil Zaufany</li>
+          <li data-i18n="ukr_pesel_method2_step2">Найти услугу "zaświadczenie o PESEL"</li>
+          <li data-i18n="ukr_pesel_method2_step3">Заполнить электронное заявление</li>
+          <li data-i18n="ukr_pesel_method2_step4">Оплатить онлайн 17 zł</li>
+          <li data-i18n="ukr_pesel_method2_step5">Получить справку по почте или забрать лично</li>
+        </ul>
+      </div>
+
+      <div class="method-card">
+        <h4 data-i18n="ukr_pesel_method3_title">📮 По почте:</h4>
+        <ul class="document-list">
+          <li data-i18n="ukr_pesel_method3_step1">Подготовить заявление (wniosek o zaświadczenie)</li>
+          <li data-i18n="ukr_pesel_method3_step2">Приложить копию паспорта</li>
+          <li data-i18n="ukr_pesel_method3_step3">Приложить квитанцию об оплате 17 zł</li>
+          <li data-i18n="ukr_pesel_method3_step4">Отправить заказным письмом в уженд</li>
+          <li data-i18n="ukr_pesel_method3_step5">Дождаться ответа по почте</li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="card" style="margin-top:12px">
+      <div class="h2" data-i18n="ukr_pesel_documents_title">Какие документы нужны</div>
+      <p class="p" data-i18n="ukr_pesel_documents_text">Для получения справки UKR PESEL необходимо предоставить:</p>
+      
+      <div class="timeline">
+        <h4 data-i18n="ukr_pesel_doc_application_title">📝 Заявление (wniosek o zaświadczenie):</h4>
+        <p data-i18n="ukr_pesel_doc_application_text">Обязательно указать цель: "для карты pobytu CUKR"</p>
+      </div>
+
+      <div class="timeline">
+        <h4 data-i18n="ukr_pesel_doc_passport_title">🛂 Паспорт / документ:</h4>
+        <p data-i18n="ukr_pesel_doc_passport_text">Оригинал или копия паспорта (для почтового способа - копия)</p>
+      </div>
+
+      <div class="timeline">
+        <h4 data-i18n="ukr_pesel_doc_receipt_title">🧾 Квитанция об оплате:</h4>
+        <p data-i18n="ukr_pesel_doc_receipt_text">Госпошлина 17 zł (обязательно приложить к заявлению)</p>
+      </div>
+    </div>
+
+    <div class="card" style="margin-top:12px">
+      <div class="h2" data-i18n="ukr_pesel_payment_title">Как найти номер счета для оплаты</div>
+      <p class="p" data-i18n="ukr_pesel_payment_text">Номер счета гмины нужен для оплаты госпошлины (17 zł). Найти его можно несколькими способами:</p>
+      
+      <div class="method-card">
+        <h4 data-i18n="ukr_pesel_payment_method1_title">🌐 Сайт гмины / города:</h4>
+        <ul class="document-list">
+          <li data-i18n="ukr_pesel_payment_method1_step1">Обычно в разделе "Opłaty"</li>
+          <li data-i18n="ukr_pesel_payment_method1_step2">Или "Opłaty skarbowe"</li>
+          <li data-i18n="ukr_pesel_payment_method1_step3">Или "Konto bankowe"</li>
+        </ul>
+      </div>
+
+      <div class="method-card">
+        <h4 data-i18n="ukr_pesel_payment_method2_title">📋 BIP (Biuletyn Informacji Publicznej):</h4>
+        <ul class="document-list">
+          <li data-i18n="ukr_pesel_payment_method2_step1">Найти BIP вашей гмины</li>
+          <li data-i18n="ukr_pesel_payment_method2_step2">Там всегда публикуют реквизиты для оплат</li>
+        </ul>
+      </div>
+
+      <div class="method-card">
+        <h4 data-i18n="ukr_pesel_payment_method3_title">🏢 В самом уженде:</h4>
+        <ul class="document-list">
+          <li data-i18n="ukr_pesel_payment_method3_step1">На стойке - часто висит табличка с реквизитами</li>
+          <li data-i18n="ukr_pesel_payment_method3_step2">В кассе/терминале - можно заплатить на месте</li>
+        </ul>
+      </div>
+
+      <div class="ukr-highlight">
+        <div data-i18n="ukr_pesel_payment_tip_title">👉 Подсказка для поиска:</div>
+        <div data-i18n="ukr_pesel_payment_tip_text">В поисковике введите: "opłata skarbowa 17 zł site:[название гмины].pl" или "BIP [название gminy] opłaty skarbowe"</div>
+      </div>
+    </div>
+
+    <div class="card" style="margin-top:12px">
+      <div class="h2" data-i18n="ukr_pesel_errors_title">Частые ошибки</div>
+      <ul class="p">
+        <li data-i18n="ukr_pesel_error1">Не указана цель "для карты pobytu CUKR" в заявлении</li>
+        <li data-i18n="ukr_pesel_error2">Отсутствует квитанция об оплате госпошлины</li>
+        <li data-i18n="ukr_pesel_error3">Неправильно заполнено заявление</li>
+        <li data-i18n="ukr_pesel_error4">Нечитаемое качество скана или фото</li>
+        <li data-i18n="ukr_pesel_error5">Обращение не в тот отдел уженда</li>
+        <li data-i18n="ukr_pesel_error6">Отсутствует пометка UKR в справке</li>
+      </ul>
+    </div>
+
+    <div class="card" style="margin-top:12px; margin-bottom: 80px;">
+      <button class="btn full" onclick="alert(t('ukr_pesel_ai_coming_soon') || 'Модуль проверки AI будет добавлен в следующей версии')" data-i18n="ukr_pesel_ai_button">🤖 Проверить справку с AI</button>
+    </div>
+  </div>
+
+  <div class="tabs">
+    <a class="tab" href="./translator.html" data-i18n="nav_translator">Переводчик</a>
+    <a class="tab" href="./checklist.html" data-i18n="nav_checklist">Чеклист</a>
+    <a class="tab" href="./consultant.html" data-i18n="nav_consultant">Консультант</a>
+  </div>
+</div>
+
+<script>
+(function(){
+  const $ = (s,r=document)=>r.querySelector(s);
+  const $$ = (s,r=document)=>Array.from(r.querySelectorAll(s));
+  const storage = { get(k,d=null){try{return JSON.parse(localStorage.getItem(k))??d}catch{return d}}, set(k,v){localStorage.setItem(k,JSON.stringify(v))} };
+
+  // i18n
+  const i18n = {
+    lang: storage.get('lang','ru'),
+    dict:{},
+    async load(lang){
+      const use = lang || i18n.lang;
+      try{
+        const res = await fetch(`./i18n/${use}.json`, {cache:'no-store'});
+        if(res.ok){ i18n.dict = await res.json(); i18n.lang = use; storage.set('lang',use); }
+      }catch(e){}
+      apply(); highlightLang();
+    }
+  };
+  const t = (k)=> i18n.dict[k] || k;
+  function apply(){
+    $$('[data-i18n]').forEach(el=>{
+      const k = el.getAttribute('data-i18n');
+      if(i18n.dict[k]) el.textContent = i18n.dict[k];
+    });
+    document.documentElement.setAttribute('lang', i18n.lang);
+  }
+  function highlightLang(){ $$('.lang button').forEach(b=> b.classList.toggle('active', b.dataset.lang===i18n.lang)); }
+  function bindLang(){ $$('.lang button').forEach(b=> b.onclick = ()=> i18n.load(b.dataset.lang)); }
+
+  // Telegram
+  (function(){ const tg=window.Telegram&&window.Telegram.WebApp; if(!tg) return; tg.expand(); tg.ready(); })();
+
+  async function boot(){
+    bindLang();
+    await i18n.load(storage.get('lang','ru'));
+  }
+  document.addEventListener('DOMContentLoaded', boot);
+  window.addEventListener('pageshow', boot);
+})();
+</script>
+</body>
+</html>
