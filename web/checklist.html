@@ -95,7 +95,7 @@
       {slug:'photos', i18n:'item.photos'},
       {slug:'payment', i18n:'item.payment'},
       {slug:'address', i18n:'item.address'},
-      {slug:'insurance', i18n:'item.insurance'},
+      {slug:'student-insurance', i18n:'item.student_insurance'},
       {slug:'bank-statement', i18n:'item.bank_statement'}
     ],
     ukr_basis: [
@@ -118,7 +118,8 @@
     if(slug==='tax-certificate') return './module-tax-certificate.html'; // ⬅️ модуль справки о налогах
     if(slug==='pit') return './module-pit.html'; // ⬅️ модуль PIT
     if(slug==='bank-statement') return './module-bank-statement.html'; // ⬅️ модуль справки о состоянии счета
-    if(slug==='pesel-ukr') return './module-pesel-ukr.html'; // ⬅️ модуль PESEL UKR
+    if(slug==='student-insurance') return './module-student-insurance.html'; // ⬅️ модуль страховки для студентов
+    if(slug==='pesel-ukr') return './module-ukr-pesel.html'; // ⬅️ модуль UKR PESEL
     return '#todo';
   }
   function computeProgress(items){ const done = items.filter(x=>x.done).length; return Math.round((done / Math.max(items.length,1)) * 100); }
