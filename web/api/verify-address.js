@@ -36,7 +36,7 @@ const RULES = {
 `,
   lease_okazjonalna: `
 Тип: Umowa najmu okazjonalnego.
-Обязательные признаки = обычный договор + нотариальное заявление (poddanie się egzekucji), адрес "na wypadek", согласие владельца запасного жилья; подписи/даты на приложениях.
+Обязательные признаки = обычный договор + нотариальное заявление (poddanie się egzekucji), адрес "на wypadek", согласие владельца запасного жилья; подписи/даты на приложениях.
 `,
   meldunek: `
 Тип: Zaświadczenie o zameldowaniu.
@@ -257,7 +257,7 @@ function ruleCheck(docType, modelJson) {
 
   if (docType === "owner") {
     const ownershipMarks =
-      containsAny(title, ["kw", "księga", "ksiega", "акт", "własno", "wlasno"]) ||
+      containsAny(title, ["kw", "księга", "ksiega", "акт", "własno", "wlasno"]) ||
       containsAny(issuer, ["sąd", "sad", "notariusz"]);
     if (!ownershipMarks)
       addError(
