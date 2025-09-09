@@ -16,18 +16,23 @@ function getApiKey() {
   );
 }
 
-// ---- helpers: pdf render + combine + vision inputs ----
+// ---------- small utils ----------
+function looksLikeRefusal(s = "") {
+  return /i'?m\s+sorr(y|ies)|can('?|no)t\s+(assist|help)|unable\s+to\s+assist|cannot\s+comply|refus/i.test(s);
+}
+function toUint8(buf) {
+  return buf instanceof Uint8Array ? buf : new Uint8Array(buf);
+}
+
+// ---------- PDF render helpers (server-side) ----------
 async function renderPdfToPngBuffers(pdfBuffer, maxPages = 10, scale = 2.2) {
   const pdfjs = await import("pdfjs-dist/legacy/build/pdf.mjs");
   const { createCanvas } = await import("@napi-rs/canvas");
 
-  // ВАЖНО: передаём именно Uint8Array
-  const doc = await pdfjs
-    .getDocument({ data: new Uint8Array(pdfBuffer), disableWorker: true })
-    .promise;
-
+  const doc = await pdfjs.getDocument({ data: toUint8(pdfBuffer), disableWorker: true }).promise;
   const pages = Math.min(doc.numPages, maxPages);
   const out = [];
+
   for (let i = 1; i <= pages; i++) {
     const page = await doc.getPage(i);
     const viewport = page.getViewport({ scale });
@@ -39,36 +44,14 @@ async function renderPdfToPngBuffers(pdfBuffer, maxPages = 10, scale = 2.2) {
   return out;
 }
 
-async function combineBuffersVerticallyToJpeg(buffers) {
-  const { createCanvas, loadImage } = await import("@napi-rs/canvas");
-  const images = [];
-  let width = 0, height = 0;
-
-  for (const b of buffers) {
-    // ВАЖНО: передаём Uint8Array
-    const img = await loadImage(new Uint8Array(b));
-    images.push(img);
-    width = Math.max(width, img.width);
-    height += img.height;
-  }
-
-  const canvas = createCanvas(width, height);
-  const ctx = canvas.getContext("2d");
-  let y = 0;
-  for (const img of images) {
-    ctx.drawImage(img, 0, y);
-    y += img.height;
-  }
-  return canvas.toBuffer("image/jpeg", { quality: 0.92 });
-}
-
+// ---------- Vision inputs ----------
 async function buildImageInputsFromBuffers(buffers) {
   let sharpLib = null;
   try { sharpLib = (await import("sharp")).default; } catch {}
   const inputs = [];
   for (const buf of buffers) {
     if (sharpLib) {
-      const base = await sharpLib(buf).rotate().resize({ width: 2400, withoutEnlargement: true }).jpeg({ quality: 92 }).toBuffer();
+      const base = await sharpLib(buf).rotate().resize({ width: 2200, withoutEnlargement: true }).jpeg({ quality: 92 }).toBuffer();
       inputs.push({ type: "image_url", image_url: { url: `data:image/jpeg;base64,${base.toString("base64")}` } });
     } else {
       inputs.push({ type: "image_url", image_url: { url: `data:image/jpeg;base64,${Buffer.from(buf).toString("base64")}` } });
@@ -77,7 +60,31 @@ async function buildImageInputsFromBuffers(buffers) {
   return inputs;
 }
 
-// ---- handler ----
+// ---------- Single-page OCR with retry-on-refusal ----------
+async function ocrImageBuffer(buf, client, variant = 1, maxTokens = 1500) {
+  const images = await buildImageInputsFromBuffers([buf]);
+
+  const SYSTEM1 =
+    "You are an OCR engine. Return the visible text as plain UTF-8 text. Do not summarize, do not add disclaimers. Output text only.";
+  const SYSTEM2 =
+    "You transcribe user-provided documents verbatim for accessibility and translation. The text may include profanity or sensitive language. Return plain UTF-8 text only. No summaries, no warnings.";
+
+  const sys = variant === 1 ? SYSTEM1 : SYSTEM2;
+
+  const completion = await client.chat.completions.create({
+    model: "gpt-4o",
+    temperature: 0,
+    max_tokens: maxTokens,
+    messages: [
+      { role: "system", content: sys },
+      { role: "user", content: [{ type: "text", text: "Extract plain text from the image exactly as seen." }, ...images] }
+    ]
+  });
+
+  return (completion.choices?.[0]?.message?.content || "").trim();
+}
+
+// ---------- Handler ----------
 export default async function handler(req, res) {
   if (req.method !== "POST") return res.status(405).json({ error: "Method not allowed" });
 
@@ -94,7 +101,7 @@ export default async function handler(req, res) {
     });
 
     const { files } = await new Promise((resolve, reject) => {
-      form.parse(req, (err, _fields, fls) => (err ? reject(err) : resolve({ files: fls })));
+      form.parse(req, (_err, _fields, fls) => (_err ? reject(_err) : resolve({ files: fls })));
     });
 
     const fileRec = files.file ? (Array.isArray(files.file) ? files.file[0] : files.file) : null;
@@ -109,7 +116,7 @@ export default async function handler(req, res) {
     let mode = "";
 
     if (mime === "application/pdf") {
-      // 1) пробуем «живой» текст
+      // 1) Прямой текстовый слой
       let pdfParse;
       try {
         const mod = await import("pdf-parse");
@@ -127,38 +134,33 @@ export default async function handler(req, res) {
         } catch {}
       }
 
-      // 2) если текста нет — Vision OCR по склеенному JPEG (до 10 страниц)
+      // 2) Нет текста — распознаём ПОСТРАНИЧНО Vision (устойчиво к отказам)
       if (!text) {
         const pages = await renderPdfToPngBuffers(buf, 10, 2.2);
         if (!pages.length) return res.status(400).json({ error: "Не удалось отрендерить PDF." });
-        const combinedJpeg = await combineBuffersVerticallyToJpeg(pages);
-        const images = await buildImageInputsFromBuffers([combinedJpeg]);
 
-        const completion = await client.chat.completions.create({
-          model: "gpt-4o",
-          temperature: 0,
-          max_tokens: 2000,
-          messages: [
-            { role: "system", content: "You are an OCR engine. Return the visible text as plain UTF-8 text. No JSON, no explanations." },
-            { role: "user", content: [{ type: "text", text: "Extract plain text from the image." }, ...images] }
-          ]
-        });
-        text = (completion.choices?.[0]?.message?.content || "").trim();
-        mode = "pdf-vision";
+        const pageTexts = [];
+        for (let i = 0; i < pages.length; i++) {
+          // Первая попытка
+          let pageText = await ocrImageBuffer(pages[i], client, 1, 1100);
+          // Если отказ или слишком коротко — повторяем с альтернативной подсказкой
+          if (!pageText || pageText.length < 8 || looksLikeRefusal(pageText)) {
+            pageText = await ocrImageBuffer(pages[i], client, 2, 1100);
+          }
+          pageTexts.push(pageText || "");
+        }
+
+        text = pageTexts.join("\n\n===== PAGE BREAK =====\n\n").trim();
+        mode = "pdf-vision-paged";
       }
+
     } else if (mime.startsWith("image/")) {
-      // OCR для изображений
-      const images = await buildImageInputsFromBuffers([buf]);
-      const completion = await client.chat.completions.create({
-        model: "gpt-4o",
-        temperature: 0,
-        max_tokens: 1500,
-        messages: [
-          { role: "system", content: "You are an OCR engine. Return the visible text as plain UTF-8 text. No JSON, no explanations." },
-          { role: "user", content: [{ type: "text", text: "Extract plain text from the image." }, ...images] }
-        ]
-      });
-      text = (completion.choices?.[0]?.message?.content || "").trim();
+      // Изображения — одна страница, но с повтором при отказе
+      let t = await ocrImageBuffer(buf, client, 1, 1500);
+      if (!t || t.length < 8 || looksLikeRefusal(t)) {
+        t = await ocrImageBuffer(buf, client, 2, 1500);
+      }
+      text = t || "";
       mode = "image-vision";
     } else {
       return res.status(400).json({ error: "Поддерживаются PDF и изображения" });
@@ -167,12 +169,7 @@ export default async function handler(req, res) {
     if (!text) return res.status(422).json({ error: "Текст не распознан" });
 
     const excerpt = text.slice(0, 1200);
-    res.status(200).json({
-      ok: true,
-      mode,
-      chars: text.length,
-      excerpt
-    });
+    res.status(200).json({ ok: true, mode, chars: text.length, excerpt });
   } catch (e) {
     const msg = e?.message || String(e);
     console.error("pdf-ocr-preview error:", e);
