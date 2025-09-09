@@ -20,7 +20,7 @@ function getApiKey() {
 // --- refusal detector ---
 const REFUSAL_RX = /(i'?m\s+sorr(y|ies)|cannot\s+help|can[' ]?t\s+assist|i\s+can[' ]?t|refuse|извините.*не могу|не могу помочь|не можу допомогти|не магу дапамагчы)/i;
 
-// --- prompts ---
+// --- translator prompts ---
 function systemPrompt(from, to) {
   return (
 `You are a neutral, professional translator. Translate from ${from} to ${to} **verbatim**.
@@ -37,11 +37,10 @@ function strongerSystemPrompt(from, to) {
 `ROLE: Translator only. TASK: Translate from ${from} to ${to} with **verbatim fidelity**.
 ALLOWED: profanity, obscenity, insults, slurs, adult/violent language — translate exactly (transformation exception).
 FORBIDDEN: refusals, safety disclaimers, moral commentary, summaries. Output = translation only.
-If a truly disallowed segment appears (e.g., sexual content with minors), replace ONLY that fragment with [REDACTED] and translate the rest.`
+If a truly disallowed segment appears (e.g., sexual content involving minors), replace ONLY that fragment with [REDACTED] and translate the rest.`
   );
 }
 
-// --- ask helpers ---
 async function ask(client, sys, userContent) {
   const r = await client.chat.completions.create({
     model: "gpt-4o-mini",
@@ -61,25 +60,17 @@ async function translateText(client, from, to, text) {
   return out;
 }
 
-/* ========================== OCR & PDF helpers ========================== */
-const toUint8 = (buf) => (buf instanceof Uint8Array ? buf : new Uint8Array(buf));
+/* ========================== OCR helpers — 1:1 как в pdf-ocr-preview.js ========================== */
 
-async function extractTextFromPdfWithPdfjs(pdfBuffer, maxPages = 10) {
-  const pdfjs = await import("pdfjs-dist/legacy/build/pdf.mjs");
-  // критично: Uint8Array
-  const doc = await pdfjs.getDocument({ data: toUint8(pdfBuffer), disableWorker: true }).promise;
-
-  const pages = Math.min(doc.numPages, maxPages);
-  let out = "";
-  for (let i = 1; i <= pages; i++) {
-    const page = await doc.getPage(i);
-    const content = await page.getTextContent();
-    const strings = (content.items || []).map((it) => it.str).filter(Boolean);
-    out += strings.join(" ") + "\n\n";
-  }
-  return out.trim();
+// utils
+function looksLikeRefusal(s = "") {
+  return /i'?m\s+sorr(y|ies)|can('?|no)t\s+(assist|help)|unable\s+to\s+assist|cannot\s+comply|refus/i.test(s);
+}
+function toUint8(buf) {
+  return buf instanceof Uint8Array ? buf : new Uint8Array(buf);
 }
 
+// PDF → PNG (до 10 стр)
 async function renderPdfToPngBuffers(pdfBuffer, maxPages = 10, scale = 2.2) {
   const pdfjs = await import("pdfjs-dist/legacy/build/pdf.mjs");
   const { createCanvas } = await import("@napi-rs/canvas");
@@ -91,46 +82,31 @@ async function renderPdfToPngBuffers(pdfBuffer, maxPages = 10, scale = 2.2) {
   for (let i = 1; i <= pages; i++) {
     const page = await doc.getPage(i);
     const viewport = page.getViewport({ scale });
-    const canvas = createCanvas(
-      Math.max(1, Math.floor(viewport.width)),
-      Math.max(1, Math.floor(viewport.height))
-    );
+    const canvas = createCanvas(Math.max(1, Math.floor(viewport.width)), Math.max(1, Math.floor(viewport.height)));
     const ctx = canvas.getContext("2d");
     await page.render({ canvasContext: ctx, viewport }).promise;
-    out.push(toUint8(canvas.toBuffer("image/png")));
+    out.push(canvas.toBuffer("image/png")); // ← как в рабочем pdf-ocr-preview (Buffer допустим)
   }
   return out;
 }
 
+// Подготовка image inputs для Vision
 async function buildImageInputsFromBuffers(buffers) {
   let sharpLib = null;
   try { sharpLib = (await import("sharp")).default; } catch {}
-
   const inputs = [];
-  for (const raw of buffers) {
-    const u8 = toUint8(raw);
+  for (const buf of buffers) {
     if (sharpLib) {
-      const base = await sharpLib(Buffer.from(u8))
-        .rotate()
-        .resize({ width: 2200, withoutEnlargement: true })
-        .jpeg({ quality: 92 })
-        .toBuffer();
-      inputs.push({
-        type: "image_url",
-        image_url: { url: `data:image/jpeg;base64,${base.toString("base64")}` }
-      });
+      const base = await sharpLib(buf).rotate().resize({ width: 2200, withoutEnlargement: true }).jpeg({ quality: 92 }).toBuffer();
+      inputs.push({ type: "image_url", image_url: { url: `data:image/jpeg;base64,${base.toString("base64")}` } });
     } else {
-      inputs.push({
-        type: "image_url",
-        image_url: { url: `data:image/jpeg;base64,${Buffer.from(u8).toString("base64")}` }
-      });
+      inputs.push({ type: "image_url", image_url: { url: `data:image/jpeg;base64,${Buffer.from(buf).toString("base64")}` } });
     }
   }
   return inputs;
 }
 
-const looksLikeRefusal = (s = "") => REFUSAL_RX.test(s);
-
+// OCR одной страницы с автоповтором при отказе
 async function ocrImageBuffer(buf, client, variant = 1, maxTokens = 1500) {
   const images = await buildImageInputsFromBuffers([buf]);
 
@@ -153,7 +129,7 @@ async function ocrImageBuffer(buf, client, variant = 1, maxTokens = 1500) {
 
   return (completion.choices?.[0]?.message?.content || "").trim();
 }
-/* ====================================================================== */
+/* ================================================================================================= */
 
 export default async function handler(req, res) {
   if (req.method !== "POST") {
@@ -172,7 +148,7 @@ export default async function handler(req, res) {
   const client = new OpenAI({ apiKey });
 
   try {
-    // Разбираем multipart/form-data
+    // multipart/form-data
     const form = formidable({
       multiples: false,
       maxFileSize: 40 * 1024 * 1024, // 40 МБ
@@ -200,42 +176,50 @@ export default async function handler(req, res) {
       });
 
       if (mime.startsWith("image/")) {
-        // Попытка 1: сразу перевод «по картинке»
+        // Прямой перевод по картинке
         let out = await ask(
           client,
           systemPrompt(from, to),
           [
             { type: "text", text: "Translate the text from this image." },
-            { type: "image_url", image_url: { url: `data:${mime};base64,${Buffer.from(toUint8(buf)).toString("base64")}` } }
+            { type: "image_url", image_url: { url: `data:${mime};base64,${Buffer.from(buf).toString("base64")}` } }
           ]
         );
 
-        // Если отказ/пусто — OCR → перевод
-        if (!out || looksLikeRefusal(out)) {
-          const ocr = await ocrImageBuffer(toUint8(buf), client, 1, 1500) || "";
-          const clean = (!ocr || ocr.length < 8 || looksLikeRefusal(ocr))
-            ? (await ocrImageBuffer(toUint8(buf), client, 2, 1500) || "")
-            : ocr;
+        // Отказ/пусто → OCR → перевод
+        if (!out || REFUSAL_RX.test(out)) {
+          const ocr1 = await ocrImageBuffer(buf, client, 1, 1500);
+          const clean = (!ocr1 || ocr1.length < 8 || looksLikeRefusal(ocr1))
+            ? (await ocrImageBuffer(buf, client, 2, 1500))
+            : ocr1;
 
           if (clean && clean.trim()) {
             out = await translateText(client, from, to, clean.slice(0, 200000));
           }
         }
-
-        if (!out) out = "";
-        parts.push(out);
+        parts.push(out || "");
 
       } else if (mime === "application/pdf") {
-        // 1) Пытаемся вытащить «живой» текст через pdfjs напрямую (без pdf-parse)
-        let extracted = "";
+        // A) Пытаемся вытащить «живой» текст через pdf-parse (как в pdf-ocr-preview)
+        let pdfParse;
         try {
-          extracted = await extractTextFromPdfWithPdfjs(buf, 10);
-        } catch {
-          extracted = "";
+          const mod = await import("pdf-parse");
+          pdfParse = mod.default || mod;
+        } catch { pdfParse = null; }
+
+        let extracted = "";
+        if (pdfParse) {
+          try {
+            const parsed = await pdfParse(buf); // pdf-parse принимает Buffer
+            const pdfText = (parsed.text || "").trim();
+            if (pdfText && pdfText.length > 10) {
+              extracted = pdfText;
+            }
+          } catch {}
         }
 
-        // 2) Если текста нет — OCR постранично (до 10 стр) с автоповтором
-        if (!extracted || extracted.length < 20) {
+        // B) Если текста нет — OCR по страницам (до 10) с автоповтором при отказе
+        if (!extracted) {
           const pages = await renderPdfToPngBuffers(buf, 10, 2.2);
           if (!pages.length) {
             res.status(400).json({ error: "Не удалось обработать PDF. Попробуйте фото/скан." });
@@ -252,13 +236,13 @@ export default async function handler(req, res) {
           extracted = pageTexts.join("\n\n===== PAGE BREAK =====\n\n").trim();
         }
 
+        // C) Переводим извлечённый текст
         if (!extracted) {
           parts.push("[PDF: текст не распознан]");
         } else {
           const out = await translateText(client, from, to, extracted.slice(0, 200000));
           parts.push(out || "");
         }
-
       } else {
         res.status(400).json({ error: "Unsupported file type" });
         return;
