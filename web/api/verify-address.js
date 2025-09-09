@@ -89,13 +89,6 @@ const OUTPUT_SPEC = `
 const TODAY = new Date();
 const norm = (s = "") => String(s || "").toLowerCase().replace(/\s+/g, " ").trim();
 
-function toYMD(d) {
-  if (!d) return null;
-  const y = d.getFullYear();
-  const m = String(d.getMonth() + 1).padStart(2, "0");
-  const day = String(d.getDate()).padStart(2, "0");
-  return `${y}-${m}-${day}`;
-}
 function toDMY(d) {
   if (!d) return null;
   const day = String(d.getDate()).padStart(2, "0");
@@ -264,7 +257,8 @@ function ruleCheck(docType, modelJson) {
 
   if (docType === "owner") {
     const ownershipMarks =
-      containsAny(title, ["kw", "księga", "ksiega", "akt", "własno", "wlasno"]) || containsAny(issuer, ["sąd", "sad", "notariusz"]);
+      containsAny(title, ["kw", "księga", "ksiega", "акт", "własno", "wlasno"]) ||
+      containsAny(issuer, ["sąd", "sad", "notariusz"]);
     if (!ownershipMarks)
       addError(
         out.errors,
@@ -293,6 +287,62 @@ function ruleCheck(docType, modelJson) {
         : "Не удалось уверенно определить корректность документа.";
   }
 
+  return out;
+}
+
+/* ---------- Вспомогательные функции для изображений и PDF ---------- */
+
+// Делает 1–2 варианта картинки (ориг + улучшенный), если есть sharp.
+// Возвращает массив объектов content для Chat Vision (image_url data: URL).
+async function buildImageInputsFromBuffers(buffers) {
+  let sharpLib = null;
+  try {
+    sharpLib = (await import("sharp")).default;
+  } catch {
+    // sharp отсутствует — отправим как есть
+  }
+
+  const inputs = [];
+  for (const buf of buffers) {
+    if (sharpLib) {
+      // Ограничим ширину, нормализуем, шарпим
+      const base = await sharpLib(buf)
+        .rotate()
+        .resize({ width: 2000, withoutEnlargement: true })
+        .jpeg({ quality: 92 })
+        .toBuffer();
+
+      const enhanced = await sharpLib(base).grayscale().normalize().sharpen().jpeg({ quality: 95 }).toBuffer();
+
+      inputs.push(
+        { type: "image_url", image_url: { url: `data:image/jpeg;base64,${base.toString("base64")}` } },
+        { type: "image_url", image_url: { url: `data:image/jpeg;base64,${enhanced.toString("base64")}` } }
+      );
+    } else {
+      inputs.push({ type: "image_url", image_url: { url: `data:image/png;base64,${buf.toString("base64")}` } });
+    }
+  }
+  return inputs;
+}
+
+// Рендер первых N страниц PDF в PNG-буферы через pdfjs + @napi-rs/canvas
+async function renderPdfToPngBuffers(pdfBuffer, maxPages = 2, scale = 2) {
+  const pdfjs = await import("pdfjs-dist/legacy/build/pdf.mjs");
+  const { createCanvas } = await import("@napi-rs/canvas");
+
+  // В Node серверлес воркер не нужен
+  const doc = await pdfjs.getDocument({ data: pdfBuffer, disableWorker: true }).promise;
+  const pages = Math.min(doc.numPages, maxPages);
+  const out = [];
+
+  for (let i = 1; i <= pages; i++) {
+    const page = await doc.getPage(i);
+    const viewport = page.getViewport({ scale });
+    const canvas = createCanvas(viewport.width, viewport.height);
+    const ctx = canvas.getContext("2d");
+    await page.render({ canvasContext: ctx, viewport }).promise;
+    out.push(canvas.toBuffer("image/png"));
+  }
   return out;
 }
 
@@ -334,7 +384,7 @@ export default async function handler(req, res) {
     const buf = await fsp.readFile(fileRec.filepath).finally(() => {
       fsp.unlink(fileRec.filepath).catch(() => {});
     });
-    const mime = fileRec.mimetype || "application/octet-stream";
+    const mime = (fileRec.mimetype || "application/octet-stream").toLowerCase();
 
     const baseInstruction = `
 Ты — строгий верификатор подтверждений адреса в Польше.
@@ -353,54 +403,65 @@ ${OUTPUT_SPEC}
     let messages;
 
     if (mime === "application/pdf") {
+      // 1) пробуем вытащить текст
       let pdfParse;
       try {
         const mod = await import("pdf-parse");
         pdfParse = mod.default || mod;
-      } catch {}
+      } catch {
+        pdfParse = null;
+      }
+
+      let textOk = false;
       if (pdfParse) {
         try {
           const parsed = await pdfParse(buf);
           const pdfText = (parsed.text || "").trim();
-          if (pdfText) {
+          if (pdfText && pdfText.length > 50) {
+            // есть «живой» текст — отправляем как текст
             messages = [
               { role: "system", content: baseInstruction },
               { role: "user", content: `OCR-текст из PDF:\n\n${pdfText.slice(0, 20000)}` },
             ];
-          } else {
-            res.status(400).json({ error: "PDF — скан без текста. Загрузите фото/скрин." });
-            return;
+            textOk = true;
           }
         } catch {
+          // пойдём на OCR
+        }
+      }
+
+      if (!textOk) {
+        // 2) PDF-скан — рендерим 1–2 страницы и отправляем Vision
+        const pageBuffers = await renderPdfToPngBuffers(buf, 2, 2); // до 2 страниц
+        if (!pageBuffers.length) {
           res.status(400).json({ error: "Не удалось обработать PDF. Загрузите фото/скрин." });
           return;
         }
-      } else {
-        res.status(501).json({ error: "Парсер PDF недоступен. Загрузите фото/скрин." });
-        return;
+        const imageInputs = await buildImageInputsFromBuffers(pageBuffers);
+
+        messages = [
+          { role: "system", content: baseInstruction },
+          {
+            role: "user",
+            content: [
+              { type: "text", text: "Проанализируй документ на изображениях (1–2 страницы). Верни СТРОГО JSON." },
+              ...imageInputs,
+            ],
+          },
+        ];
       }
     } else if (mime.startsWith("image/")) {
-      // Улучшение низкого качества: sharp (динамический импорт)
-      let variants = [];
-      try {
-        const sharp = (await import("sharp")).default;
-        const origJpeg = await sharp(buf).rotate().resize({ width: 2000, withoutEnlargement: true }).jpeg({ quality: 90 }).toBuffer();
-        const enhancedJpeg = await sharp(origJpeg).grayscale().normalize().sharpen().jpeg({ quality: 95 }).toBuffer();
-        variants = [origJpeg, enhancedJpeg];
-      } catch {
-        variants = [buf];
-      }
-
-      const imgs = variants.map((b) => ({
-        type: "image_url",
-        image_url: { url: `data:image/jpeg;base64,${b.toString("base64")}` },
-      }));
+      // Фото: делаем варианты и отправляем Vision
+      const imageInputs = await buildImageInputsFromBuffers([buf]);
 
       messages = [
         { role: "system", content: baseInstruction },
         {
           role: "user",
-          content: [{ type: "text", text: "Проанализируй документ, извлеки поля и оцени пригодность. Верни СТРОГО JSON." }, ...imgs],
+          content: [
+            { type: "text", text: "Проанализируй документ, извлеки поля и оцени пригодность. Верни СТРОГО JSON." },
+            ...imageInputs,
+          ],
         },
       ];
     } else {
