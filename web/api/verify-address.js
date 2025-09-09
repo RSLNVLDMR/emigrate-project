@@ -2,6 +2,7 @@
 import OpenAI from "openai";
 import formidable from "formidable";
 import { promises as fsp } from "node:fs";
+import { Buffer } from "node:buffer";
 
 export const config = { api: { bodyParser: false } };
 
@@ -284,7 +285,16 @@ function ruleCheck(docType, modelJson) {
   return out;
 }
 
-/* ---------- Вспомогательные функции для изображений и PDF ---------- */
+/* ---------- Вспомогательные функции для изображений и PDF (совместимые с pdfjs-dist) ---------- */
+
+// pdfjs-dist требует чистый Uint8Array
+function toU8(x) {
+  if (!x) return new Uint8Array();
+  if (Buffer.isBuffer(x)) return new Uint8Array(x.buffer, x.byteOffset, x.byteLength);
+  if (x instanceof Uint8Array) return new Uint8Array(x.buffer, x.byteOffset, x.byteLength);
+  if (x instanceof ArrayBuffer) return new Uint8Array(x);
+  return new Uint8Array(x);
+}
 
 // Улучшаем изображение и готовим inputs для Vision
 async function buildImageInputsFromBuffers(buffers) {
@@ -304,23 +314,23 @@ async function buildImageInputsFromBuffers(buffers) {
         { type: "image_url", image_url: { url: `data:image/jpeg;base64,${enhanced.toString("base64")}` } }
       );
     } else {
-      inputs.push({ type: "image_url", image_url: { url: `data:image/jpeg;base64,${buf.toString("base64")}` } });
+      inputs.push({ type: "image_url", image_url: { url: `data:image/jpeg;base64,${Buffer.from(buf).toString("base64")}` } });
     }
   }
   return inputs;
 }
 
-// PDF -> буферы PNG первых N страниц
+// PDF -> буферы PNG первых N страниц (Uint8Array внутрь pdfjs)
 async function renderPdfToPngBuffers(pdfBuffer, maxPages = 10, scale = 2.2) {
   const pdfjs = await import("pdfjs-dist/legacy/build/pdf.mjs");
   const { createCanvas } = await import("@napi-rs/canvas");
-  const doc = await pdfjs.getDocument({ data: pdfBuffer, disableWorker: true }).promise;
+  const doc = await pdfjs.getDocument({ data: toU8(pdfBuffer), disableWorker: true }).promise;
   const pages = Math.min(doc.numPages, maxPages);
   const out = [];
   for (let i = 1; i <= pages; i++) {
     const page = await doc.getPage(i);
     const viewport = page.getViewport({ scale });
-    const canvas = createCanvas(viewport.width, viewport.height);
+    const canvas = createCanvas(Math.max(1, Math.floor(viewport.width)), Math.max(1, Math.floor(viewport.height)));
     const ctx = canvas.getContext("2d");
     await page.render({ canvasContext: ctx, viewport }).promise;
     out.push(canvas.toBuffer("image/png"));
@@ -408,7 +418,7 @@ ${OUTPUT_SPEC}
     let messages;
 
     if (mime === "application/pdf") {
-      // 1) пробуем вытянуть «живой» текст
+      // 1) Пытаемся вытащить «живой» текст через pdf-parse (он принимает Buffer)
       let pdfParse;
       try {
         const mod = await import("pdf-parse");
@@ -431,18 +441,15 @@ ${OUTPUT_SPEC}
       }
 
       if (!textOk) {
-        // 2) PDF-скан → рендерим до 10 страниц и СКЛЕИВАЕМ в один JPEG
+        // 2) PDF-скан → рендерим до 10 страниц, склеиваем в один длинный JPEG
         const pageBuffers = await renderPdfToPngBuffers(buf, 10, 2.2);
         if (!pageBuffers.length) {
           res.status(400).json({ error: "Не удалось обработать PDF. Загрузите фото/скан." });
           return;
         }
         const combinedJpeg = await combineBuffersVerticallyToJpeg(pageBuffers);
-        // Отправляем в модель ОДНО изображение (и его усиленную версию)
         const visionInputs = await buildImageInputsFromBuffers([combinedJpeg]);
-
-        // оставляем только первый вариант (базовый) — часто даёт более стабильный ответ
-        const singleInput = [visionInputs[0]];
+        const singleInput = [visionInputs[0]]; // используем один вариант для стабильности
 
         messages = [
           { role: "system", content: baseInstruction },
@@ -456,7 +463,7 @@ ${OUTPUT_SPEC}
         ];
       }
     } else if (mime.startsWith("image/")) {
-      // Фото: готовим одно изображение (без дублей) — стабильнее
+      // Фото: один вариант
       const inputs = await buildImageInputsFromBuffers([buf]);
       const single = [inputs[0]];
       messages = [
