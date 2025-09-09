@@ -5,7 +5,7 @@ import { promises as fsp } from "node:fs";
 
 export const config = { api: { bodyParser: false } };
 
-// Читаем ключ из нескольких часто встречающихся имён
+// --- API key ---
 function getApiKey() {
   return (
     process.env.OPENAI_API_KEY ||
@@ -17,8 +17,10 @@ function getApiKey() {
   );
 }
 
+// --- refusal detector ---
 const REFUSAL_RX = /(i'?m\s+sorr(y|ies)|cannot\s+help|can[' ]?t\s+assist|i\s+can[' ]?t|refuse|извините.*не могу|не могу помочь|не можу допомогти|не магу дапамагчы)/i;
 
+// --- prompts ---
 function systemPrompt(from, to) {
   return (
 `You are a neutral, professional translator. Translate from ${from} to ${to} **verbatim**.
@@ -30,7 +32,6 @@ Follow strictly:
 - If legally prohibited content appears (e.g., sexual content involving minors), translate the rest and replace that specific segment with [REDACTED], keeping structure.`
   );
 }
-
 function strongerSystemPrompt(from, to) {
   return (
 `ROLE: Translator only. TASK: Translate from ${from} to ${to} with **verbatim fidelity**.
@@ -40,6 +41,7 @@ If a truly disallowed segment appears (e.g., sexual content with minors), replac
   );
 }
 
+// --- ask helpers ---
 async function ask(client, sys, userContent) {
   const r = await client.chat.completions.create({
     model: "gpt-4o-mini",
@@ -51,7 +53,6 @@ async function ask(client, sys, userContent) {
   });
   return (r.choices?.[0]?.message?.content || "").trim();
 }
-
 async function translateText(client, from, to, text) {
   let out = await ask(client, systemPrompt(from, to), text);
   if (!out || REFUSAL_RX.test(out)) {
@@ -61,25 +62,29 @@ async function translateText(client, from, to, text) {
 }
 
 /* ========================== OCR helpers (PDF / Images) ========================== */
-function toUint8(buf) {
-  return buf instanceof Uint8Array ? buf : new Uint8Array(buf);
-}
+const toUint8 = (buf) => (buf instanceof Uint8Array ? buf : new Uint8Array(buf));
 
 async function renderPdfToPngBuffers(pdfBuffer, maxPages = 10, scale = 2.2) {
   const pdfjs = await import("pdfjs-dist/legacy/build/pdf.mjs");
   const { createCanvas } = await import("@napi-rs/canvas");
 
+  // КРИТИЧЕСКОЕ МЕСТО: только Uint8Array!
   const doc = await pdfjs.getDocument({ data: toUint8(pdfBuffer), disableWorker: true }).promise;
+
   const pages = Math.min(doc.numPages, maxPages);
   const out = [];
 
   for (let i = 1; i <= pages; i++) {
     const page = await doc.getPage(i);
     const viewport = page.getViewport({ scale });
-    const canvas = createCanvas(Math.max(1, Math.floor(viewport.width)), Math.max(1, Math.floor(viewport.height)));
+    const canvas = createCanvas(
+      Math.max(1, Math.floor(viewport.width)),
+      Math.max(1, Math.floor(viewport.height))
+    );
     const ctx = canvas.getContext("2d");
     await page.render({ canvasContext: ctx, viewport }).promise;
-    out.push(canvas.toBuffer("image/png"));
+    // Возвращаем PNG как Uint8Array, а не Buffer
+    out.push(toUint8(canvas.toBuffer("image/png")));
   }
   return out;
 }
@@ -87,21 +92,33 @@ async function renderPdfToPngBuffers(pdfBuffer, maxPages = 10, scale = 2.2) {
 async function buildImageInputsFromBuffers(buffers) {
   let sharpLib = null;
   try { sharpLib = (await import("sharp")).default; } catch {}
+
   const inputs = [];
-  for (const buf of buffers) {
+  for (const raw of buffers) {
+    const u8 = toUint8(raw);
     if (sharpLib) {
-      const base = await sharpLib(buf).rotate().resize({ width: 2200, withoutEnlargement: true }).jpeg({ quality: 92 }).toBuffer();
-      inputs.push({ type: "image_url", image_url: { url: `data:image/jpeg;base64,${base.toString("base64")}` } });
+      // sharp умеет и Uint8Array, но подстрахуемся: создадим Buffer из Uint8Array
+      const base = await sharpLib(Buffer.from(u8))
+        .rotate()
+        .resize({ width: 2200, withoutEnlargement: true })
+        .jpeg({ quality: 92 })
+        .toBuffer();
+      inputs.push({
+        type: "image_url",
+        image_url: { url: `data:image/jpeg;base64,${base.toString("base64")}` }
+      });
     } else {
-      inputs.push({ type: "image_url", image_url: { url: `data:image/jpeg;base64,${Buffer.from(buf).toString("base64")}` } });
+      // если sharp нет — кодируем исходный Uint8Array
+      inputs.push({
+        type: "image_url",
+        image_url: { url: `data:image/jpeg;base64,${Buffer.from(u8).toString("base64")}` }
+      });
     }
   }
   return inputs;
 }
 
-function looksLikeRefusal(s = "") {
-  return REFUSAL_RX.test(s);
-}
+const looksLikeRefusal = (s = "") => REFUSAL_RX.test(s);
 
 async function ocrImageBuffer(buf, client, variant = 1, maxTokens = 1500) {
   const images = await buildImageInputsFromBuffers([buf]);
@@ -147,7 +164,7 @@ export default async function handler(req, res) {
     // Разбираем multipart/form-data
     const form = formidable({
       multiples: false,
-      maxFileSize: 40 * 1024 * 1024, // подняли лимит до 40 МБ, как в verify-address
+      maxFileSize: 40 * 1024 * 1024, // 40 МБ
       uploadDir: "/tmp",
       keepExtensions: true
     });
@@ -178,15 +195,15 @@ export default async function handler(req, res) {
           systemPrompt(from, to),
           [
             { type: "text", text: "Translate the text from this image." },
-            { type: "image_url", image_url: { url: `data:${mime};base64,${buf.toString("base64")}` } }
+            { type: "image_url", image_url: { url: `data:${mime};base64,${Buffer.from(toUint8(buf)).toString("base64")}` } }
           ]
         );
 
         // Если отказ/пусто — OCR → перевод
         if (!out || looksLikeRefusal(out)) {
-          const ocr = await ocrImageBuffer(buf, client, 1, 1500) || "";
+          const ocr = await ocrImageBuffer(toUint8(buf), client, 1, 1500) || "";
           const clean = (!ocr || ocr.length < 8 || looksLikeRefusal(ocr))
-            ? (await ocrImageBuffer(buf, client, 2, 1500) || "")
+            ? (await ocrImageBuffer(toUint8(buf), client, 2, 1500) || "")
             : ocr;
 
           if (clean && clean.trim()) {
@@ -198,27 +215,27 @@ export default async function handler(req, res) {
         parts.push(out);
 
       } else if (mime === "application/pdf") {
-        // Сначала пытаемся вытащить «живой» текст
+        // 1) пробуем вытащить «живой» текст
         let pdfParse;
         try {
           const mod = await import("pdf-parse");
           pdfParse = mod.default || mod;
-        } catch (e) {
+        } catch {
           pdfParse = null;
         }
 
         let extracted = "";
         if (pdfParse) {
           try {
-            const parsed = await pdfParse(buf);
+            const parsed = await pdfParse(buf); // pdf-parse принимает Buffer
             const pdfText = (parsed.text || "").trim();
             if (pdfText && pdfText.length > 10) {
               extracted = pdfText;
             }
-          } catch {}
+          } catch {/* ignore */}
         }
 
-        // Если «живого» текста нет — OCR постранично (до 10 стр) с автоповтором
+        // 2) если текста нет — OCR постранично (до 10 стр) с автоповтором
         if (!extracted) {
           const pages = await renderPdfToPngBuffers(buf, 10, 2.2);
           if (!pages.length) {
@@ -249,7 +266,7 @@ export default async function handler(req, res) {
       }
     }
 
-    // Plain-текст?
+    // Параллельно — простой текст
     if (text && text.trim()) {
       const out = await translateText(client, from, to, text);
       parts.push(out || "");
