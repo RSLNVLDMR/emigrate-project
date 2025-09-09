@@ -2,6 +2,7 @@
 import OpenAI from "openai";
 import formidable from "formidable";
 import { promises as fsp } from "node:fs";
+import { Buffer } from "node:buffer";
 
 export const config = { api: { bodyParser: false } };
 
@@ -60,14 +61,21 @@ async function translateText(client, from, to, text) {
   return out;
 }
 
-/* ========================== OCR helpers — 1:1 как в pdf-ocr-preview.js ========================== */
+/* ========================== OCR helpers — совместим с pdfjs-dist ========================== */
 
-// utils
-function looksLikeRefusal(s = "") {
-  return /i'?m\s+sorr(y|ies)|can('?|no)t\s+(assist|help)|unable\s+to\s+assist|cannot\s+comply|refus/i.test(s);
-}
-function toUint8(buf) {
-  return buf instanceof Uint8Array ? buf : new Uint8Array(buf);
+// ВАЖНО: pdfjs-dist не принимает Node Buffer. Ему нужен чистый Uint8Array.
+function toU8(x) {
+  if (!x) return new Uint8Array();
+  if (Buffer.isBuffer(x)) {
+    // создаём чистый Uint8Array, а не оставляем Buffer
+    return new Uint8Array(x.buffer, x.byteOffset, x.byteLength);
+  }
+  if (x instanceof Uint8Array) {
+    // гарантируем, что это именно Uint8Array, а не подкласс
+    return new Uint8Array(x.buffer, x.byteOffset, x.byteLength);
+  }
+  if (x instanceof ArrayBuffer) return new Uint8Array(x);
+  return new Uint8Array(x);
 }
 
 // PDF → PNG (до 10 стр)
@@ -75,17 +83,18 @@ async function renderPdfToPngBuffers(pdfBuffer, maxPages = 10, scale = 2.2) {
   const pdfjs = await import("pdfjs-dist/legacy/build/pdf.mjs");
   const { createCanvas } = await import("@napi-rs/canvas");
 
-  const doc = await pdfjs.getDocument({ data: toUint8(pdfBuffer), disableWorker: true }).promise;
+  const doc = await pdfjs.getDocument({ data: toU8(pdfBuffer), disableWorker: true }).promise;
   const pages = Math.min(doc.numPages, maxPages);
   const out = [];
 
   for (let i = 1; i <= pages; i++) {
-    const page = await doc.getPage(i);
+    const page = await pdfjs.getDocument ? await doc.getPage(i) : await doc.getPage(i); // защита от tree-shaking
     const viewport = page.getViewport({ scale });
     const canvas = createCanvas(Math.max(1, Math.floor(viewport.width)), Math.max(1, Math.floor(viewport.height)));
     const ctx = canvas.getContext("2d");
     await page.render({ canvasContext: ctx, viewport }).promise;
-    out.push(canvas.toBuffer("image/png")); // ← как в рабочем pdf-ocr-preview (Buffer допустим)
+    // Возвращаем PNG буфер (далее мы только base64 кодируем для Vision)
+    out.push(canvas.toBuffer("image/png"));
   }
   return out;
 }
@@ -106,7 +115,8 @@ async function buildImageInputsFromBuffers(buffers) {
   return inputs;
 }
 
-// OCR одной страницы с автоповтором при отказе
+const looksLikeRefusal = (s = "") => REFUSAL_RX.test(s);
+
 async function ocrImageBuffer(buf, client, variant = 1, maxTokens = 1500) {
   const images = await buildImageInputsFromBuffers([buf]);
 
@@ -200,7 +210,7 @@ export default async function handler(req, res) {
         parts.push(out || "");
 
       } else if (mime === "application/pdf") {
-        // A) Пытаемся вытащить «живой» текст через pdf-parse (как в pdf-ocr-preview)
+        // A) Пытаемся вытащить «живой» текст через pdf-parse (он принимает Buffer — это ок)
         let pdfParse;
         try {
           const mod = await import("pdf-parse");
@@ -210,7 +220,7 @@ export default async function handler(req, res) {
         let extracted = "";
         if (pdfParse) {
           try {
-            const parsed = await pdfParse(buf); // pdf-parse принимает Buffer
+            const parsed = await pdfParse(buf);
             const pdfText = (parsed.text || "").trim();
             if (pdfText && pdfText.length > 10) {
               extracted = pdfText;
@@ -220,7 +230,7 @@ export default async function handler(req, res) {
 
         // B) Если текста нет — OCR по страницам (до 10) с автоповтором при отказе
         if (!extracted) {
-          const pages = await renderPdfToPngBuffers(buf, 10, 2.2);
+          const pages = await renderPdfToPngBuffers(buf, 10, 2.2); // <-- тут уже toU8 внутри
           if (!pages.length) {
             res.status(400).json({ error: "Не удалось обработать PDF. Попробуйте фото/скан." });
             return;
