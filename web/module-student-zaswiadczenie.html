@@ -2,51 +2,154 @@
 <html lang="ru">
 <head>
   <meta charset="utf-8" />
-  <title>Zaświadczenie z uczelni — eMigrant</title>
+  <title data-i18n="student_zaswiadczenie_title">Zaświadczenie z uczelni — eMigrant</title>
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <script src="https://telegram.org/js/telegram-web-app.js"></script>
   <link rel="stylesheet" href="./styles.css" />
+  <style>
+    .lang{position:relative;z-index:5}
+    .footer{position:sticky;bottom:0;z-index:4}
+    button,.btn,select,input,textarea{pointer-events:auto;touch-action:manipulation;-webkit-tap-highlight-color:transparent}
+    .requirement-item {
+      background: #f8f9fa;
+      border-left: 4px solid #007bff;
+      padding: 12px;
+      margin: 8px 0;
+      border-radius: 4px;
+    }
+    .requirement-item.important {
+      border-left-color: #dc3545;
+      background: #fff5f5;
+    }
+    .requirement-item.success {
+      border-left-color: #28a745;
+      background: #f0fff4;
+    }
+  </style>
 </head>
 <body>
 <div class="screen">
   <div class="container">
     <div class="header">
-      <div class="h1">Zaświadczenie z uczelni</div>
-      <a href="./checklist.html" class="badge">← к чеклисту</a>
+      <div class="h1" data-i18n="student_zaswiadczenie_title">Zaświadczenie z uczelni</div>
+      <div class="lang">
+        <button data-lang="ru" class="active">RU</button>
+        <button data-lang="ua">UA</button>
+        <button data-lang="by">BY</button>
+      </div>
     </div>
 
     <div class="card">
-      <div class="h2">Что это</div>
-      <p class="p">Справка из вуза о поступлении (o przyjęciu) или обучении (o studiowaniu) с вашими данными, датами и подписью/штампом.</p>
-      <div class="h2">Как получить</div>
-      <ol class="p">
-        <li>Уточните в деканате/USOS, как оформить справку (электронная/бумажная).</li>
-        <li>Проверьте совпадение ФИО (латиницей) и дат.</li>
-        <li>Попросите указать форму обучения и период.</li>
-      </ol>
-      <div class="h2">Частые ошибки</div>
-      <ul class="p">
-        <li>ФИО не совпадает с загранпаспортом (латиница).</li>
-        <li>Нет дат или подписи/штампа.</li>
-        <li>Нечитаемое качество скана.</li>
-      </ul>
+      <div class="h2" data-i18n="student_zaswiadczenie_what_title">Что это такое</div>
+      <p class="p" data-i18n="student_zaswiadczenie_what_text">Справка из вуза о поступлении (o przyjęciu) или обучении (o studiowaniu) с вашими данными, датами и подписью/штампом. Это обязательный документ для подачи на карту побыту по учебе.</p>
+      
+      <div class="h2" data-i18n="student_zaswiadczenie_requirements_title">Требования к справке</div>
+      
+      <div class="requirement-item important">
+        <strong data-i18n="student_zaswiadczenie_req_name_title">📝 ФИО студента:</strong>
+        <p data-i18n="student_zaswiadczenie_req_name_text">Должно точно совпадать с загранпаспортом (латиницей). Проверьте каждую букву!</p>
+      </div>
+
+      <div class="requirement-item important">
+        <strong data-i18n="student_zaswiadczenie_req_dates_title">📅 Даты обучения:</strong>
+        <p data-i18n="student_zaswiadczenie_req_dates_text">Должны быть указаны дата начала и окончания обучения. Минимум 1 год обучения.</p>
+      </div>
+
+      <div class="requirement-item">
+        <strong data-i18n="student_zaswiadczenie_req_university_title">🏫 Данные вуза:</strong>
+        <p data-i18n="student_zaswiadczenie_req_university_text">Полное название учебного заведения, адрес, контактные данные.</p>
+      </div>
+
+      <div class="requirement-item">
+        <strong data-i18n="student_zaswiadczenie_req_program_title">📚 Программа обучения:</strong>
+        <p data-i18n="student_zaswiadczenie_req_program_text">Название специальности, форма обучения (стационар/заочная), уровень (бакалавр/магистр).</p>
+      </div>
+
+      <div class="requirement-item important">
+        <strong data-i18n="student_zaswiadczenie_req_signature_title">✍️ Подпись и печать:</strong>
+        <p data-i18n="student_zaswiadczenie_req_signature_text">Обязательны подпись ответственного лица и официальная печать вуза.</p>
+      </div>
+
+      <div class="requirement-item success">
+        <strong data-i18n="student_zaswiadczenie_req_quality_title">📄 Качество документа:</strong>
+        <p data-i18n="student_zaswiadczenie_req_quality_text">Четкий скан или фото, все данные читаемы, документ не поврежден.</p>
+      </div>
     </div>
 
     <div class="card" style="margin-top:12px">
-      <div class="h2">Проверка документа (AI)</div>
-      <input id="file" type="file" accept=".pdf,.jpg,.jpeg,.png" class="input" />
-      <small class="muted">До 10 МБ. Перед отправкой мы анонимизируем личные данные.</small>
-      <div class="row" style="margin-top:10px">
-        <button class="btn secondary" onclick="alert('M1: бесплатная очередь поставлена (демо)')">Отправить бесплатно (до 24 ч)</button>
-        <button class="btn" onclick="alert('M1: оплата/ускорение будет в M2')">Оплатить ускорение (~1 мин)</button>
-      </div>
+      <div class="h2" data-i18n="student_zaswiadczenie_how_title">Как получить справку</div>
+      <ol class="p">
+        <li data-i18n="student_zaswiadczenie_how_step1">Обратитесь в деканат или через систему USOS вашего вуза</li>
+        <li data-i18n="student_zaswiadczenie_how_step2">Уточните, нужна ли справка o przyjęciu (о поступлении) или o studiowaniu (об обучении)</li>
+        <li data-i18n="student_zaswiadczenie_how_step3">Проверьте правильность написания ФИО латиницей</li>
+        <li data-i18n="student_zaswiadczenie_how_step4">Убедитесь, что указаны все необходимые даты и данные</li>
+        <li data-i18n="student_zaswiadczenie_how_step5">Получите справку с подписью и печатью</li>
+      </ol>
+    </div>
+
+    <div class="card" style="margin-top:12px">
+      <div class="h2" data-i18n="student_zaswiadczenie_errors_title">Частые ошибки</div>
+      <ul class="p">
+        <li data-i18n="student_zaswiadczenie_error1">ФИО не совпадает с загранпаспортом (латиница)</li>
+        <li data-i18n="student_zaswiadczenie_error2">Отсутствуют даты начала или окончания обучения</li>
+        <li data-i18n="student_zaswiadczenie_error3">Нет подписи или печати вуза</li>
+        <li data-i18n="student_zaswiadczenie_error4">Нечитаемое качество скана или фото</li>
+        <li data-i18n="student_zaswiadczenie_error5">Справка выдана не на официальном бланке вуза</li>
+      </ul>
+    </div>
+
+    <div class="card" style="margin-top:12px; margin-bottom: 80px;">
+      <button class="btn full" onclick="alert(t('student_zaswiadczenie_ai_coming_soon') || 'Модуль проверки AI будет добавлен в следующей версии')" data-i18n="student_zaswiadczenie_ai_button">🤖 Проверить документ с AI</button>
     </div>
   </div>
+
+  <div class="tabs">
+    <a class="tab" href="./translator.html" data-i18n="nav_translator">Переводчик</a>
+    <a class="tab" href="./checklist.html" data-i18n="nav_checklist">Чеклист</a>
+    <a class="tab" href="./consultant.html" data-i18n="nav_consultant">Консультант</a>
+  </div>
 </div>
-<script type="module">
-  import { initTelegram } from './auth.js';
-  import { enableBackButton } from './utils.js';
-  initTelegram(); enableBackButton();
+
+<script>
+(function(){
+  const $ = (s,r=document)=>r.querySelector(s);
+  const $$ = (s,r=document)=>Array.from(r.querySelectorAll(s));
+  const storage = { get(k,d=null){try{return JSON.parse(localStorage.getItem(k))??d}catch{return d}}, set(k,v){localStorage.setItem(k,JSON.stringify(v))} };
+
+  // i18n
+  const i18n = {
+    lang: storage.get('lang','ru'),
+    dict:{},
+    async load(lang){
+      const use = lang || i18n.lang;
+      try{
+        const res = await fetch(`./i18n/${use}.json`, {cache:'no-store'});
+        if(res.ok){ i18n.dict = await res.json(); i18n.lang = use; storage.set('lang',use); }
+      }catch(e){}
+      apply(); highlightLang();
+    }
+  };
+  const t = (k)=> i18n.dict[k] || k;
+  function apply(){
+    $$('[data-i18n]').forEach(el=>{
+      const k = el.getAttribute('data-i18n');
+      if(i18n.dict[k]) el.textContent = i18n.dict[k];
+    });
+    document.documentElement.setAttribute('lang', i18n.lang);
+  }
+  function highlightLang(){ $$('.lang button').forEach(b=> b.classList.toggle('active', b.dataset.lang===i18n.lang)); }
+  function bindLang(){ $$('.lang button').forEach(b=> b.onclick = ()=> i18n.load(b.dataset.lang)); }
+
+  // Telegram
+  (function(){ const tg=window.Telegram&&window.Telegram.WebApp; if(!tg) return; tg.expand(); tg.ready(); })();
+
+  async function boot(){
+    bindLang();
+    await i18n.load(storage.get('lang','ru'));
+  }
+  document.addEventListener('DOMContentLoaded', boot);
+  window.addEventListener('pageshow', boot);
+})();
 </script>
 </body>
 </html>
