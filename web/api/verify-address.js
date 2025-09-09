@@ -21,23 +21,23 @@ function getApiKey() {
 const RULES = {
   common: `
 - Принимаются только документы, которые реально подтверждают адрес проживания в Польше сейчас.
-- Кандидаты: Umowa najmu (обычная/okazjonalna), Zaświadczenie o zameldowaniu (мелдунек), документ собственника + заявление/подтверждение проживания.
-- НЕ подходят: случайные письма с адресом, чеки, визитки, скрин Google Maps и т.п.
+- Кандидаты: umowa najmu (обычная/okazjonalna), zaświadczenie o zameldowaniu (мелдунек), право собственности + подтверждение проживания, umowa użyczenia, подтверждения отеля/общежития, заявление арендодателя о предоставлении жилья.
+- НЕ подходят: случайные письма с адресом, чеки, инвойсы, визитки, скрин Google Maps и т.п.
 - Извлеки поля: full_name, address, postal_code (NN-NNN), city, doc_date, valid_from, valid_to, issuer, signatures_present.
-- Если скан шумный — всё равно попытайся прочитать «якоря»: "Umowa najmu", "Zaświadczenie o zameldowaniu", "Wynajmujący", "Najemca", "Urząd", "Gmina", "Miasto", "Kod pocztowy".
+- Если скан шумный — всё равно попытайся прочитать «якоря»: "Umowa najmu", "Umowa użyczenia", "Zaświadczenie o zameldowaniu", "Wynajmujący", "Najemca", "Podpis", "Urząd", "Gmina", "Miasto", "Kod pocztowy", "Hotel", "Akademik".
 - severity: "critical" (делает документ непригодным), "major" (надо исправить/добавить), "minor" (косметика).
 `,
   lease_standard: `
 Тип: Umowa najmu (обычная).
-Обязательные признаки для пригодности:
-- стороны (Wynajmujący/Najemca) присутствуют (ФИО/название);
+Обязательные признаки:
+- стороны (Wynajmujący/Najemca) присутствуют;
 - адрес жилья полон (улица, дом/кв, индекс, город);
-- есть подписи обеих сторон (или отметка о подписании);
+- подписи обеих сторон;
 - срок не истёк (valid_to в будущем) ИЛИ бессрочно; дата не старше 12 мес.
 `,
   lease_okazjonalna: `
 Тип: Umowa najmu okazjonalnego.
-Обязательные признаки = обычный договор + нотариальное заявление (poddanie się egzekucji), адрес "на wypadek", согласие владельца запасного жилья; подписи/даты на приложениях.
+Обязательные признаки = обычный договор + нотариальное заявление (poddanie się egzekucji), адрес "na wypadek", согласие владельца запасного жилья; подписи/даты на приложениях.
 `,
   meldunek: `
 Тип: Zaświadczenie o zameldowaniu.
@@ -55,6 +55,30 @@ const RULES = {
 - заявление/подтверждение проживания заявителя по адресу собственника;
 - подпись собственника (и при необходимости печать).
 `,
+  uzyczenie: `
+Тип: Umowa użyczenia (безвозмездное пользование).
+Обязательные признаки:
+- стороны (дающий жильё и пользующийся);
+- полный адрес жилья;
+- подписи сторон;
+- период проживания (valid_from/valid_to) или чёткое указание на действительность сейчас.
+`,
+  hotel_dorm: `
+Тип: Подтверждение отеля/общежития (академик).
+Обязательные признаки:
+- наименование и адрес объекта размещения (issuer/address);
+- ФИО гостя/студента;
+- даты проживания, покрывающие дату подачи либо будущий период;
+- реквизиты/номер брони; подпись/печать обычно не обязательна.
+`,
+  landlord_declaration: `
+Тип: Заявление/декларация арендодателя о предоставлении жилья.
+Обязательные признаки:
+- адрес жилья;
+- однозначная формулировка, что заявителю предоставлено место проживания;
+- подпись арендодателя;
+- дата документа (желательно не старше 12 мес.).
+`,
   other: `
 Тип: Другое подтверждение — оцени по общим правилам и не помечай как "пригодно", если нет чётких обязательных признаков.
 `,
@@ -65,9 +89,9 @@ const OUTPUT_SPEC = `
 Верни СТРОГО JSON:
 {
   "is_proof_of_address": true | false,
-  "doc_kind": "lease_standard|lease_okazjonalna|meldunek|owner|other",
+  "doc_kind": "lease_standard|lease_okazjonalna|meldunek|owner|uzyczenie|hotel_dorm|landlord_declaration|other",
   "verdict": "pass" | "fail" | "uncertain",
-  "message": "краткое резюме",
+  "message": "краткое резюме (по-русски, без служебных скобок)",
   "errors": [{"code":"STRING","title":"STRING","detail":"STRING","severity":"critical|major|minor"}],
   "recommendations": ["STRING", ...],
   "fieldsExtracted": {
@@ -88,8 +112,18 @@ const OUTPUT_SPEC = `
 
 /* ---------- Утилиты и пост-валидация ---------- */
 const TODAY = new Date();
+const TODAY_ISO = toYMD(TODAY);
+const TODAY_DMY = toDMY(TODAY);
+
 const norm = (s = "") => String(s || "").toLowerCase().replace(/\s+/g, " ").trim();
 
+function toYMD(d) {
+  if (!d) return null;
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
+}
 function toDMY(d) {
   if (!d) return null;
   const day = String(d.getDate()).padStart(2, "0");
@@ -152,7 +186,7 @@ function unifyExpiryErrors(errors, vTo) {
           severity: "critical",
         };
       }
-      continue;
+      continue; // остальные «про срок» отбрасываем
     }
     kept.push(e);
   }
@@ -160,26 +194,31 @@ function unifyExpiryErrors(errors, vTo) {
   return kept;
 }
 
-/** Жёсткая проверка пригодности документа + «человеческие» тексты */
-function ruleCheck(docType, modelJson) {
+/** Жёсткая проверка пригодности + дружелюбные тексты */
+function ruleCheck(docTypeHint, modelJson) {
   const out = { ...modelJson };
   out.errors = Array.isArray(out.errors) ? [...out.errors] : [];
   out.recommendations = Array.isArray(out.recommendations) ? [...out.recommendations] : [];
 
   const f = out.fieldsExtracted || {};
   const docDate = parseDate(f.doc_date);
+  const vFrom = parseDate(f.valid_from);
   const vTo = parseDate(f.valid_to);
+  const title = norm(out.doc_kind || "");
+  const issuer = norm(f.issuer || "");
 
+  // Базовая логика
   if (out.is_proof_of_address === false) {
     addError(
       out.errors,
       "not_proof",
       "Не является подтверждением адреса",
-      "В документе нет обязательных признаков (договор/мелдунек/заявление собственника и т.п.).",
+      "В документе нет обязательных признаков (договор/мелдунек/заявление собственника/отель и т.п.).",
       "critical"
     );
   }
 
+  // Сроки
   if (vTo && vTo < TODAY) {
     addError(
       out.errors,
@@ -199,12 +238,21 @@ function ruleCheck(docType, modelJson) {
     );
   }
 
-  const title = norm(out.doc_kind || "");
-  const issuer = norm(f.issuer || "");
+  // Общий адрес
+  if (!f.address || !f.postal_code || !f.city) {
+    addError(
+      out.errors,
+      "address_incomplete",
+      "Неполный адрес",
+      "Нужен полный польский адрес: улица, дом/квартира, индекс и город.",
+      "critical"
+    );
+  }
 
-  if (docType === "meldunek") {
+  // Тип-специфика
+  if (out.doc_kind === "meldunek") {
     const hasIssuer =
-      containsAny(issuer, ["urząd", "urzad", "gmina", "miasto", " um ", " ug "]) ||
+      containsAny(issuer, ["urząd", "urzad", "gmina", "miasto", " urz ", " um ", " ug "]) ||
       containsAny(title, ["meldunek", "zameld"]);
     if (!hasIssuer)
       addError(
@@ -224,15 +272,7 @@ function ruleCheck(docType, modelJson) {
       );
   }
 
-  if (docType === "lease_standard" || docType === "lease_okazjonalna") {
-    if (!f.address || !f.postal_code || !f.city)
-      addError(
-        out.errors,
-        "address_incomplete",
-        "Неполный адрес",
-        "В документе должен быть полный адрес: улица, дом/квартира, индекс и город.",
-        "critical"
-      );
+  if (out.doc_kind === "lease_standard" || out.doc_kind === "lease_okazjonalna") {
     if (f.signatures_present === false)
       addError(
         out.errors,
@@ -241,20 +281,19 @@ function ruleCheck(docType, modelJson) {
         "Нужны подписи собственника/арендодателя и квартиросъёмщика.",
         "critical"
       );
-    if (docType === "lease_okazjonalna" && !containsAny(title, ["okazjonal"]))
+    if (out.doc_kind === "lease_okazjonalna" && !containsAny(title, ["okazjonal"]))
       addError(
         out.errors,
         "not_okazjonalna",
         "Не видно признаков najmu okazjonalnego",
-        "Должны быть: нотариальное заявление, адрес «на wypadek» и согласие владельца.",
+        "Должны быть: нотариальное заявление, адрес «na wypadek» и согласие владельца.",
         "major"
       );
   }
 
-  if (docType === "owner") {
+  if (out.doc_kind === "owner") {
     const ownershipMarks =
-      containsAny(title, ["kw", "księга", "ksiega", "акт", "własno", "wlasno"]) ||
-      containsAny(issuer, ["sąd", "sad", "notariusz"]);
+      containsAny(title, ["kw", "księga", "ksiega", "akt", "własno", "wlasno"]) || containsAny(issuer, ["sąd", "sad", "notariusz"]);
     if (!ownershipMarks)
       addError(
         out.errors,
@@ -265,6 +304,68 @@ function ruleCheck(docType, modelJson) {
       );
   }
 
+  if (out.doc_kind === "uzyczenie") {
+    if (f.signatures_present === false)
+      addError(
+        out.errors,
+        "no_signatures",
+        "Нет подписей сторон",
+        "Для umowa użyczenia нужны подписи предоставляющего жильё и пользующегося.",
+        "critical"
+      );
+    if (!vFrom && !vTo)
+      addError(
+        out.errors,
+        "no_period",
+        "Не указан период проживания",
+        "Добавьте даты начала/окончания или явное указание, что действует сейчас.",
+        "major"
+      );
+  }
+
+  if (out.doc_kind === "hotel_dorm") {
+    const looksLikeIssuer =
+      containsAny(issuer, ["hotel", "hostel", "akademik", "dom studencki", "dorm"]) ||
+      containsAny(title, ["hotel", "hostel", "akademik", "dorm"]);
+    if (!looksLikeIssuer)
+      addError(
+        out.errors,
+        "no_hotel_issuer",
+        "Не распознан объект размещения",
+        "Укажите наименование отеля/общежития (issuer) и адрес.",
+        "major"
+      );
+    // Для отелей подпись обычно не обязательна, поэтому не требуем signatures_present
+    if (!vFrom && !vTo)
+      addError(
+        out.errors,
+        "no_stay_dates",
+        "Нет дат проживания",
+        "Нужны даты, покрывающие дату подачи или будущий период проживания.",
+        "critical"
+      );
+  }
+
+  if (out.doc_kind === "landlord_declaration") {
+    if (f.signatures_present === false)
+      addError(
+        out.errors,
+        "no_landlord_signature",
+        "Нет подписи арендодателя",
+        "Заявление должно быть подписано арендодателем.",
+        "critical"
+      );
+    if (!vFrom && !vTo && !docDate)
+      addError(
+        out.errors,
+        "no_date",
+        "Нет даты документа",
+        "Добавьте дату заявления (желательно не старше 12 месяцев).",
+        "major"
+      );
+  }
+
+  // Итоговый вердикт
   const hasCritical = out.errors.some((e) => e.severity === "critical");
   const hasMajor = out.errors.some((e) => e.severity === "major");
 
@@ -385,7 +486,7 @@ export default async function handler(req, res) {
       form.parse(req, (err, flds, fls) => (err ? reject(err) : resolve({ fields: flds, files: fls })));
     });
 
-    const docType = (Array.isArray(fields.docType) ? fields.docType[0] : fields.docType) || "other";
+    const docTypeHint = (Array.isArray(fields.docType) ? fields.docType[0] : fields.docType) || "other";
     const fileRec = files.file ? (Array.isArray(files.file) ? files.file[0] : files.file) : null;
 
     if (!fileRec) {
@@ -399,26 +500,48 @@ export default async function handler(req, res) {
     const mime = (fileRec.mimetype || "application/octet-stream").toLowerCase();
 
     const baseInstruction = `
-Ты — строгий верификатор подтверждений адреса в Польше. Тебе передан doc_kind_hint: "${docType}".
-Если документ не содержит обязательных признаков — это не подтверждение адреса.
-ВСЕГДА верни один из doc_kind: lease_standard|lease_okazjonalna|meldunek|owner|other (если не уверен — выбери наиболее близкий).
-Требуется принять решение: pass/fail/uncertain. Не уклоняйся.
-1) Выполни OCR и извлечение данных (в т.ч. из длинного склеенного изображения с несколькими страницами).
-2) Определи вид документа и пригодность (is_proof_of_address).
-3) Заполни fieldsExtracted и выяви ошибки по правилам ниже.
-4) Верни ответ СТРОГО по JSON-схеме.
+Ты — эксперт, который проверяет, подходит ли предоставленный документ как подтверждение адреса проживания в Польше для подачи на karta pobytu czasowego.
+На вход ты получаешь OCR-текст (или изображения) и подсказку doc_kind_hint="${docTypeHint}".
+Работай по-русски (все тексты ответа на русском), верни СТРОГО JSON по схеме ниже.
+
+Дата сегодня: ${TODAY_DMY} (ISO: ${TODAY_ISO}). Если дат нет — отметь ошибкой.
+
+Допустимые документы:
+- Договор аренды (umowa najmu, в т.ч. okazjonalna).
+- Право собственности (акт/№ KW) + подтверждение проживания.
+- Официальная регистрация по адресу (zaświadczenie o zameldowaniu).
+- Договор безвозмездного пользования (umowa użyczenia).
+- Подтверждения отеля/общежития с датами проживания.
+- Заявление арендодателя об обеспечении места проживания.
+
+Критерии пригодности (если нет — документ непригоден):
+- Полный польский адрес (улица, дом/кв, индекс NN-NNN, город).
+- ФИО заявителя (или однозначная ссылка).
+- Сроки покрывают дату подачи; разумный период проживания вперёд.
+- Для договоров/заявлений — подписи/печати/реквизиты; для meldunek — орган выдачи.
+
+Инструкции:
+1) Если текст нечитаем — verdict:"fail" и ошибка unreadable.
+2) Определи вид документа (всегда выбери один из перечня ниже).
+3) Извлеки ключевые поля (fieldsExtracted) и проверь валидность дат относительно ${TODAY_ISO}.
+4) Сформируй errors[] с дружелюбными формулировками (без дублей).
+5) Всегда верни verdict: pass|fail|uncertain + короткое человеческое message.
+
+Типы для "doc_kind": lease_standard|lease_okazjonalna|meldunek|owner|uzyczenie|hotel_dorm|landlord_declaration|other
+
+Схема ответа:
+${OUTPUT_SPEC}
+
 Правила:
 ${RULES.common}
-Специфика типа по подсказке doc_kind_hint="${docType}":
-${RULES[docType] || RULES.other}
-Если документ похож, но не дотягивает до требований (нет печати/подписей/истёк срок) — это не proof и добавь соответствующие ошибки.
-${OUTPUT_SPEC}
+Специфика по подсказке doc_kind_hint="${docTypeHint}":
+${RULES[docTypeHint] || RULES.other}
 `.trim();
 
     let messages;
 
     if (mime === "application/pdf") {
-      // 1) Пытаемся вытащить «живой» текст через pdf-parse (он принимает Buffer)
+      // 1) пробуем вытянуть «живой» текст из PDF (pdf-parse принимает Buffer)
       let pdfParse;
       try {
         const mod = await import("pdf-parse");
@@ -441,7 +564,7 @@ ${OUTPUT_SPEC}
       }
 
       if (!textOk) {
-        // 2) PDF-скан → рендерим до 10 страниц, склеиваем в один длинный JPEG
+        // 2) PDF-скан → рендерим до 10 страниц и склеиваем их в один длинный JPEG
         const pageBuffers = await renderPdfToPngBuffers(buf, 10, 2.2);
         if (!pageBuffers.length) {
           res.status(400).json({ error: "Не удалось обработать PDF. Загрузите фото/скан." });
@@ -449,7 +572,7 @@ ${OUTPUT_SPEC}
         }
         const combinedJpeg = await combineBuffersVerticallyToJpeg(pageBuffers);
         const visionInputs = await buildImageInputsFromBuffers([combinedJpeg]);
-        const singleInput = [visionInputs[0]]; // используем один вариант для стабильности
+        const singleInput = [visionInputs[0]]; // один вариант — стабильнее
 
         messages = [
           { role: "system", content: baseInstruction },
@@ -514,7 +637,7 @@ ${OUTPUT_SPEC}
         json.errors,
         "low_quality",
         "Недостаточно данных для уверенной проверки",
-        "Загрузите более чёткий файл (желательно все страницы на одном изображении), чтобы были видны подписи/печати и полный адрес.",
+        "Загрузите более чёткий файл (при необходимости — все страницы в одном изображении), чтобы были видны подписи/печати и полный адрес.",
         "major"
       );
       if (!json.message) {
@@ -522,7 +645,7 @@ ${OUTPUT_SPEC}
       }
     }
 
-    const finalJson = ruleCheck(docType, json);
+    const finalJson = ruleCheck(docTypeHint, json);
     res.status(200).json(finalJson);
   } catch (e) {
     const msg = e?.message || String(e);
