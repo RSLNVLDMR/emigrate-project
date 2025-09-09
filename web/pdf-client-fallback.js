@@ -1,67 +1,87 @@
 // web/pdf-client-fallback.js
 (() => {
-  // где брать воркер pdf.js (cdn)
   const PDFJS_VER = "4.7.76";
-  const PDFJS_WORKER =
-    `https://cdn.jsdelivr.net/npm/pdfjs-dist@${PDFJS_VER}/build/pdf.worker.min.js`;
+  const PDFJS_SCRIPT = `https://cdn.jsdelivr.net/npm/pdfjs-dist@${PDFJS_VER}/build/pdf.min.js`;
+  const PDFJS_WORKER = `https://cdn.jsdelivr.net/npm/pdfjs-dist@${PDFJS_VER}/build/pdf.worker.min.js`;
 
-  // найдём первый инпут type=file (при желании поменяйте селектор)
   let fileInput = null;
-  let checkBtn = null; // кнопка "Проверить" (не обязательно)
-  let currentFile = null; // сюда кладём исходный или конвертированный файл
+  let currentFile = null; // File, который реально отправим (PNG/JPEG после конвертации)
 
-  function findControls() {
+  function findInput() {
     fileInput =
       document.querySelector('input[type="file"][name="file"]') ||
       document.querySelector('input[type="file"]');
-
-    checkBtn =
-      document.querySelector('#checkBtn') ||
-      document.querySelector('button[data-action="verify"]') ||
-      null;
   }
 
   async function ensurePdfJs() {
     if (window.pdfjsLib) return window.pdfjsLib;
     await new Promise((resolve, reject) => {
       const s = document.createElement("script");
-      s.src = `https://cdn.jsdelivr.net/npm/pdfjs-dist@${PDFJS_VER}/build/pdf.min.js`;
+      s.src = PDFJS_SCRIPT;
       s.onload = resolve;
       s.onerror = () => reject(new Error("pdf.js load failed"));
       document.head.appendChild(s);
     });
-    // настроим воркер
-    if (window.pdfjsLib) {
-      window.pdfjsLib.GlobalWorkerOptions.workerSrc = PDFJS_WORKER;
-      return window.pdfjsLib;
-    }
-    throw new Error("pdf.js not available");
+    if (!window.pdfjsLib) throw new Error("pdf.js not available");
+    window.pdfjsLib.GlobalWorkerOptions.workerSrc = PDFJS_WORKER;
+    return window.pdfjsLib;
   }
 
-  async function pdfFirstPageToPng(file) {
+  async function renderPdfToCombinedImage(file, maxPages = 3) {
     const pdfjsLib = await ensurePdfJs();
     const ab = await file.arrayBuffer();
     const doc = await pdfjsLib.getDocument({ data: ab }).promise;
-    const page = await doc.getPage(1);
+    const pages = Math.min(maxPages, doc.numPages);
 
-    const scale = 1.8;
-    const viewport = page.getViewport({ scale });
+    // пробуем с высокого масштаба и уменьшаем, если файл выходит за 9 МБ
+    let scale = 2.4;
 
-    // создаём канвас на клиенте
-    const canvas = document.createElement("canvas");
-    canvas.width = Math.floor(viewport.width);
-    canvas.height = Math.floor(viewport.height);
-    const ctx = canvas.getContext("2d");
+    async function renderAtScale(scaleVal) {
+      const bitmaps = [];
+      let totalWidth = 0;
+      let totalHeight = 0;
 
-    await page.render({ canvasContext: ctx, viewport }).promise;
+      for (let i = 1; i <= pages; i++) {
+        const page = await doc.getPage(i);
+        const viewport = page.getViewport({ scale: scaleVal });
 
-    // получаем Blob PNG и упаковываем в File
-    const blob = await new Promise((res) => canvas.toBlob(res, "image/png", 0.95));
-    const pngFile = new File([blob], (file.name || "document").replace(/\.pdf$/i, ".png"), {
-      type: "image/png",
-      lastModified: Date.now(),
-    });
-    return pngFile;
+        const canvas = document.createElement("canvas");
+        canvas.width = Math.floor(viewport.width);
+        canvas.height = Math.floor(viewport.height);
+        const ctx = canvas.getContext("2d");
+        await page.render({ canvasContext: ctx, viewport }).promise;
+
+        // сохраняем Bitmap и размеры
+        bitmaps.push(canvas);
+        totalWidth = Math.max(totalWidth, canvas.width);
+        totalHeight += canvas.height;
+      }
+
+      // склеиваем вертикально
+      const out = document.createElement("canvas");
+      out.width = totalWidth;
+      out.height = totalHeight;
+      const octx = out.getContext("2d");
+      let y = 0;
+      for (const bmp of bitmaps) {
+        octx.drawImage(bmp, 0, y);
+        y += bmp.height;
+      }
+
+      // JPEG обычно компактнее для сканов
+      const blob = await new Promise((res) => out.toBlob(res, "image/jpeg", 0.92));
+      return new File([blob], (file.name || "document").replace(/\.pdf$/i, ".jpg"), {
+        type: "image/jpeg",
+        lastModified: Date.now(),
+      });
+    }
+
+    // подбираем масштаб, чтобы уложиться в лимит (≈9 МБ, запас к 10 МБ)
+    for (;;) {
+      const f = await renderAtScale(scale);
+      if (f.size <= 9 * 1024 * 1024 || scale <= 1.6) return f;
+      scale -= 0.2;
+    }
   }
 
   async function onFileChange() {
@@ -71,72 +91,33 @@
       return;
     }
     if (/application\/pdf/i.test(f.type) || /\.pdf$/i.test(f.name || "")) {
-      // PDF → рендерим 1-ю страницу в PNG
       try {
-        // можно показать в интерфейсе спиннер, если есть контейнер
-        currentFile = await pdfFirstPageToPng(f);
-
-        // если у вас есть превью — отрисуем превью PNG
+        currentFile = await renderPdfToCombinedImage(f, 3); // первые 3 страницы
         const preview = document.querySelector('[data-preview]');
         if (preview) {
           const url = URL.createObjectURL(currentFile);
-          preview.innerHTML = `<img src="${url}" style="max-width:100%;border-radius:12px" alt="PDF page 1"/>`;
+          preview.innerHTML = `<img src="${url}" style="max-width:100%;border-radius:12px" alt="PDF pages preview"/>`;
         }
       } catch (e) {
-        console.error("PDF render fallback failed:", e);
-        // если не получилось — оставим исходный файл (сервер попробует текстовым парсером)
-        currentFile = f;
+        console.error("PDF fallback failed:", e);
+        currentFile = f; // пусть сервер попробует сам
       }
     } else {
       currentFile = f;
     }
   }
 
-  // Экспортируем маленький helper: забрать файл для отправки
   window.emgrGetUploadFile = function () {
-    if (currentFile) return currentFile;
-    const f = fileInput?.files?.[0] || null;
-    return f || null;
+    return currentFile || (fileInput?.files?.[0] || null);
   };
 
-  function wireUp() {
-    findControls();
-    if (!fileInput) return; // нет загрузки — нечего делать
+  function wire() {
+    findInput();
+    if (!fileInput) return;
     fileInput.addEventListener("change", onFileChange, { passive: true });
 
-    // если у вас кнопка "Проверить" вручную формирует FormData — менять не нужно.
-    // Если используете new FormData(form) — перехватим submit и подкинем наш файл.
-    const form = fileInput.closest("form");
-    if (form) {
-      form.addEventListener("submit", async (e) => {
-        // если отправка уже перехватывается вашим кодом — этот блок можно удалить.
-        if (form.dataset.emgrHandled) return;
-        e.preventDefault();
-
-        const file = window.emgrGetUploadFile();
-        if (!file) {
-          alert("Сначала загрузите файл");
-          return;
-        }
-
-        const fd = new FormData(form);
-        fd.delete("file");
-        fd.append("file", file, file.name);
-
-        try {
-          const res = await fetch(form.action || "/api/verify-address", {
-            method: "POST",
-            body: fd,
-          });
-          const json = await res.json();
-          // отдаём результат вашему коду через событие
-          form.dispatchEvent(new CustomEvent("emgr:verify:done", { detail: json }));
-        } catch (err) {
-          form.dispatchEvent(new CustomEvent("emgr:verify:error", { detail: err }));
-        }
-      });
-    }
+    // Если отправляете через form — этот блок можно удалить. Мы не перехватываем submit.
   }
 
-  document.addEventListener("DOMContentLoaded", wireUp);
+  document.addEventListener("DOMContentLoaded", wire);
 })();
