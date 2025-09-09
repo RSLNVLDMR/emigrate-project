@@ -61,16 +61,30 @@ async function translateText(client, from, to, text) {
   return out;
 }
 
-/* ========================== OCR helpers (PDF / Images) ========================== */
+/* ========================== OCR & PDF helpers ========================== */
 const toUint8 = (buf) => (buf instanceof Uint8Array ? buf : new Uint8Array(buf));
+
+async function extractTextFromPdfWithPdfjs(pdfBuffer, maxPages = 10) {
+  const pdfjs = await import("pdfjs-dist/legacy/build/pdf.mjs");
+  // критично: Uint8Array
+  const doc = await pdfjs.getDocument({ data: toUint8(pdfBuffer), disableWorker: true }).promise;
+
+  const pages = Math.min(doc.numPages, maxPages);
+  let out = "";
+  for (let i = 1; i <= pages; i++) {
+    const page = await doc.getPage(i);
+    const content = await page.getTextContent();
+    const strings = (content.items || []).map((it) => it.str).filter(Boolean);
+    out += strings.join(" ") + "\n\n";
+  }
+  return out.trim();
+}
 
 async function renderPdfToPngBuffers(pdfBuffer, maxPages = 10, scale = 2.2) {
   const pdfjs = await import("pdfjs-dist/legacy/build/pdf.mjs");
   const { createCanvas } = await import("@napi-rs/canvas");
 
-  // КРИТИЧЕСКОЕ МЕСТО: только Uint8Array!
   const doc = await pdfjs.getDocument({ data: toUint8(pdfBuffer), disableWorker: true }).promise;
-
   const pages = Math.min(doc.numPages, maxPages);
   const out = [];
 
@@ -83,7 +97,6 @@ async function renderPdfToPngBuffers(pdfBuffer, maxPages = 10, scale = 2.2) {
     );
     const ctx = canvas.getContext("2d");
     await page.render({ canvasContext: ctx, viewport }).promise;
-    // Возвращаем PNG как Uint8Array, а не Buffer
     out.push(toUint8(canvas.toBuffer("image/png")));
   }
   return out;
@@ -97,7 +110,6 @@ async function buildImageInputsFromBuffers(buffers) {
   for (const raw of buffers) {
     const u8 = toUint8(raw);
     if (sharpLib) {
-      // sharp умеет и Uint8Array, но подстрахуемся: создадим Buffer из Uint8Array
       const base = await sharpLib(Buffer.from(u8))
         .rotate()
         .resize({ width: 2200, withoutEnlargement: true })
@@ -108,7 +120,6 @@ async function buildImageInputsFromBuffers(buffers) {
         image_url: { url: `data:image/jpeg;base64,${base.toString("base64")}` }
       });
     } else {
-      // если sharp нет — кодируем исходный Uint8Array
       inputs.push({
         type: "image_url",
         image_url: { url: `data:image/jpeg;base64,${Buffer.from(u8).toString("base64")}` }
@@ -142,7 +153,7 @@ async function ocrImageBuffer(buf, client, variant = 1, maxTokens = 1500) {
 
   return (completion.choices?.[0]?.message?.content || "").trim();
 }
-/* ============================================================================== */
+/* ====================================================================== */
 
 export default async function handler(req, res) {
   if (req.method !== "POST") {
@@ -215,28 +226,16 @@ export default async function handler(req, res) {
         parts.push(out);
 
       } else if (mime === "application/pdf") {
-        // 1) пробуем вытащить «живой» текст
-        let pdfParse;
-        try {
-          const mod = await import("pdf-parse");
-          pdfParse = mod.default || mod;
-        } catch {
-          pdfParse = null;
-        }
-
+        // 1) Пытаемся вытащить «живой» текст через pdfjs напрямую (без pdf-parse)
         let extracted = "";
-        if (pdfParse) {
-          try {
-            const parsed = await pdfParse(buf); // pdf-parse принимает Buffer
-            const pdfText = (parsed.text || "").trim();
-            if (pdfText && pdfText.length > 10) {
-              extracted = pdfText;
-            }
-          } catch {/* ignore */}
+        try {
+          extracted = await extractTextFromPdfWithPdfjs(buf, 10);
+        } catch {
+          extracted = "";
         }
 
-        // 2) если текста нет — OCR постранично (до 10 стр) с автоповтором
-        if (!extracted) {
+        // 2) Если текста нет — OCR постранично (до 10 стр) с автоповтором
+        if (!extracted || extracted.length < 20) {
           const pages = await renderPdfToPngBuffers(buf, 10, 2.2);
           if (!pages.length) {
             res.status(400).json({ error: "Не удалось обработать PDF. Попробуйте фото/скан." });
