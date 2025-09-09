@@ -64,7 +64,7 @@ const OUTPUT_SPEC = `
 Верни СТРОГО JSON:
 {
   "is_proof_of_address": true | false,
-  "doc_kind": "STRING",
+  "doc_kind": "lease_standard|lease_okazjonalna|meldunek|owner|other",
   "verdict": "pass" | "fail" | "uncertain",
   "message": "краткое резюме",
   "errors": [{"code":"STRING","title":"STRING","detail":"STRING","severity":"critical|major|minor"}],
@@ -122,6 +122,7 @@ function addError(arr, code, title, detail, severity = "major") {
   if ((arr || []).some((e) => norm(e.code) === keyCode || norm(e.title) === keyTitle)) return;
   arr.push({ code, title, detail, severity });
 }
+
 function isExpiryErr(e) {
   const t = norm(e.title);
   const c = norm(e.code);
@@ -251,7 +252,7 @@ function ruleCheck(docType, modelJson) {
 
   if (docType === "owner") {
     const ownershipMarks =
-      containsAny(title, ["kw", "księга", "ksiega", "акт", "własно", "wlasno"]) ||
+      containsAny(title, ["kw", "księга", "ksiega", "акт", "własno", "wlasno"]) ||
       containsAny(issuer, ["sąd", "sad", "notariusz"]);
     if (!ownershipMarks)
       addError(
@@ -284,11 +285,11 @@ function ruleCheck(docType, modelJson) {
 }
 
 /* ---------- Вспомогательные функции для изображений и PDF ---------- */
+
+// Улучшаем изображение и готовим inputs для Vision
 async function buildImageInputsFromBuffers(buffers) {
   let sharpLib = null;
-  try {
-    sharpLib = (await import("sharp")).default;
-  } catch {}
+  try { sharpLib = (await import("sharp")).default; } catch {}
   const inputs = [];
   for (const buf of buffers) {
     if (sharpLib) {
@@ -303,12 +304,13 @@ async function buildImageInputsFromBuffers(buffers) {
         { type: "image_url", image_url: { url: `data:image/jpeg;base64,${enhanced.toString("base64")}` } }
       );
     } else {
-      inputs.push({ type: "image_url", image_url: { url: `data:image/png;base64,${buf.toString("base64")}` } });
+      inputs.push({ type: "image_url", image_url: { url: `data:image/jpeg;base64,${buf.toString("base64")}` } });
     }
   }
   return inputs;
 }
 
+// PDF -> буферы PNG первых N страниц
 async function renderPdfToPngBuffers(pdfBuffer, maxPages = 10, scale = 2.2) {
   const pdfjs = await import("pdfjs-dist/legacy/build/pdf.mjs");
   const { createCanvas } = await import("@napi-rs/canvas");
@@ -324,6 +326,27 @@ async function renderPdfToPngBuffers(pdfBuffer, maxPages = 10, scale = 2.2) {
     out.push(canvas.toBuffer("image/png"));
   }
   return out;
+}
+
+// Склейка нескольких изображений вертикально в один JPEG
+async function combineBuffersVerticallyToJpeg(buffers) {
+  const { createCanvas, loadImage } = await import("@napi-rs/canvas");
+  const images = [];
+  let width = 0, height = 0;
+  for (const b of buffers) {
+    const img = await loadImage(b);
+    images.push(img);
+    width = Math.max(width, img.width);
+    height += img.height;
+  }
+  const canvas = createCanvas(width, height);
+  const ctx = canvas.getContext("2d");
+  let y = 0;
+  for (const img of images) {
+    ctx.drawImage(img, 0, y);
+    y += img.height;
+  }
+  return canvas.toBuffer("image/jpeg", { quality: 0.92 });
 }
 
 /* ---------- Основной обработчик ---------- */
@@ -343,7 +366,7 @@ export default async function handler(req, res) {
   try {
     const form = formidable({
       multiples: false,
-      maxFileSize: 40 * 1024 * 1024, // <— подняли лимит до 40 МБ
+      maxFileSize: 40 * 1024 * 1024, // 40 МБ
       uploadDir: "/tmp",
       keepExtensions: true,
     });
@@ -366,15 +389,17 @@ export default async function handler(req, res) {
     const mime = (fileRec.mimetype || "application/octet-stream").toLowerCase();
 
     const baseInstruction = `
-Ты — строгий верификатор подтверждений адреса в Польше.
-Работай на польских/русских документах. Если информации недостаточно, всё равно дай заключение и перечисли причины.
-1) Выполни OCR и извлечение данных (даже если изображение длинное и содержит несколько страниц).
+Ты — строгий верификатор подтверждений адреса в Польше. Тебе передан doc_kind_hint: "${docType}".
+Если документ не содержит обязательных признаков — это не подтверждение адреса.
+ВСЕГДА верни один из doc_kind: lease_standard|lease_okazjonalna|meldunek|owner|other (если не уверен — выбери наиболее близкий).
+Требуется принять решение: pass/fail/uncertain. Не уклоняйся.
+1) Выполни OCR и извлечение данных (в т.ч. из длинного склеенного изображения с несколькими страницами).
 2) Определи вид документа и пригодность (is_proof_of_address).
 3) Заполни fieldsExtracted и выяви ошибки по правилам ниже.
 4) Верни ответ СТРОГО по JSON-схеме.
 Правила:
 ${RULES.common}
-Специфика типа "${docType}":
+Специфика типа по подсказке doc_kind_hint="${docType}":
 ${RULES[docType] || RULES.other}
 Если документ похож, но не дотягивает до требований (нет печати/подписей/истёк срок) — это не proof и добавь соответствующие ошибки.
 ${OUTPUT_SPEC}
@@ -383,6 +408,7 @@ ${OUTPUT_SPEC}
     let messages;
 
     if (mime === "application/pdf") {
+      // 1) пробуем вытянуть «живой» текст
       let pdfParse;
       try {
         const mod = await import("pdf-parse");
@@ -405,32 +431,41 @@ ${OUTPUT_SPEC}
       }
 
       if (!textOk) {
-        const pageBuffers = await renderPdfToPngBuffers(buf, 10, 2.2); // <— до 10 страниц
+        // 2) PDF-скан → рендерим до 10 страниц и СКЛЕИВАЕМ в один JPEG
+        const pageBuffers = await renderPdfToPngBuffers(buf, 10, 2.2);
         if (!pageBuffers.length) {
           res.status(400).json({ error: "Не удалось обработать PDF. Загрузите фото/скан." });
           return;
         }
-        const imageInputs = await buildImageInputsFromBuffers(pageBuffers);
+        const combinedJpeg = await combineBuffersVerticallyToJpeg(pageBuffers);
+        // Отправляем в модель ОДНО изображение (и его усиленную версию)
+        const visionInputs = await buildImageInputsFromBuffers([combinedJpeg]);
+
+        // оставляем только первый вариант (базовый) — часто даёт более стабильный ответ
+        const singleInput = [visionInputs[0]];
+
         messages = [
           { role: "system", content: baseInstruction },
           {
             role: "user",
             content: [
-              { type: "text", text: "На изображениях — первые страницы документа. Извлеки данные и оцени пригодность. Верни СТРОГО JSON." },
-              ...imageInputs,
+              { type: "text", text: "На изображении — склеенные первые страницы PDF. Извлеки данные и оцени пригодность. Верни СТРОГО JSON." },
+              ...singleInput,
             ],
           },
         ];
       }
     } else if (mime.startsWith("image/")) {
-      const imageInputs = await buildImageInputsFromBuffers([buf]);
+      // Фото: готовим одно изображение (без дублей) — стабильнее
+      const inputs = await buildImageInputsFromBuffers([buf]);
+      const single = [inputs[0]];
       messages = [
         { role: "system", content: baseInstruction },
         {
           role: "user",
           content: [
             { type: "text", text: "Проанализируй документ, извлеки поля и оцени пригодность. Верни СТРОГО JSON." },
-            ...imageInputs,
+            ...single,
           ],
         },
       ];
@@ -444,6 +479,7 @@ ${OUTPUT_SPEC}
       response_format: { type: "json_object" },
       messages,
       temperature: 0.0,
+      max_tokens: 900,
     });
 
     let json;
@@ -461,6 +497,7 @@ ${OUTPUT_SPEC}
       };
     }
 
+    // Если модель уклонилась — превращаем в FAIL с понятной причиной
     if (!json || json.verdict === "uncertain") {
       json = json || {};
       json.is_proof_of_address = false;
@@ -470,7 +507,7 @@ ${OUTPUT_SPEC}
         json.errors,
         "low_quality",
         "Недостаточно данных для уверенной проверки",
-        "Загрузите более чёткий файл (желательно все страницы) — чтобы были видны подписи/печати и полный адрес.",
+        "Загрузите более чёткий файл (желательно все страницы на одном изображении), чтобы были видны подписи/печати и полный адрес.",
         "major"
       );
       if (!json.message) {
