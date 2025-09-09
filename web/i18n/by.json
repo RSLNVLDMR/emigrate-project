@@ -87,11 +87,11 @@
   "consult_title": "Звязацца з кансультантам",
   "consult_topic": "Каротка апішыце запыт",
   "consult_msg": "Паведамленне/дэталі",
-  "consult_open_chat": "Адкрыць чат у Telegram",
-  "consult_note": "Мы сфарміруем чарнавік звароту і адкрыем чат з ботам.",
+  "consult_send_message": "Адправіць паведамленне кансультанту",
+  "consult_note": "Паведамленне будзе адпраўлена кансультанту @emigrate_support у Telegram.",
   "consult_topic_ph": "Напрыклад: падаўжэнне карты, змена працы",
   "consult_msg_ph": "Апішыце сітуацыю...",
-  "consult_err_topic": "Апішыце ваш запыт",
+  "consult_err_topic": "Калі ласка, укажыце тэму запыту",
 
   "legal_title": "Палітыка канфідэнцыйнасці і ўмовы",
 

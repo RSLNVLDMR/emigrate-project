@@ -35,8 +35,8 @@
     </label>
 
     <div class="footer">
-      <button id="open" class="btn full" data-i18n="consult_open_chat">Открыть чат в Telegram</button>
-      <small class="muted" data-i18n="consult_note">Мы сформируем черновик обращения и откроем чат с ботом.</small>
+      <button id="open" class="btn full" data-i18n="consult_send_message">Отправить сообщение консультанту</button>
+      <small class="muted" data-i18n="consult_note">Сообщение будет отправлено консультанту @emigrate_support в Telegram.</small>
     </div>
   </div>
 
@@ -52,7 +52,7 @@
   const $ = (s,r=document)=>r.querySelector(s);
   const $$ = (s,r=document)=>Array.from(r.querySelectorAll(s));
   const storage = { get(k,d=null){try{return JSON.parse(localStorage.getItem(k))??d}catch{return d}}, set(k,v){localStorage.setItem(k,JSON.stringify(v))} };
-  const BOT_USERNAME = window.BOT_USERNAME || 'your_bot_username_here';
+  const SUPPORT_USERNAME = 'emigrate_support';
 
   // i18n
   const i18n = {
@@ -89,15 +89,29 @@
     open.onclick = ()=>{
       const topic = $('#topic').value.trim();
       const message = $('#msg').value.trim();
-      if(!topic){ alert(t('consult_err_topic')); return; }
-      const id = 'c'+Date.now();
-      storage.set(id, {topic, message});
-      const payload = encodeURIComponent(JSON.stringify({topic, message, id}));
-      const url = `tg://resolve?domain=${BOT_USERNAME}&start=consult_${payload}`;
-      // надёжный способ в WebApp:
+      if(!topic){ 
+        alert(t('consult_err_topic') || 'Пожалуйста, укажите тему запроса'); 
+        return; 
+      }
+      
+      // Формируем сообщение для отправки
+      const fullMessage = `📋 *Новый запрос консультации*\n\n` +
+        `🎯 *Тема:* ${topic}\n\n` +
+        `💬 *Сообщение:*\n${message || 'Без дополнительных деталей'}\n\n` +
+        `⏰ *Время:* ${new Date().toLocaleString('ru-RU')}`;
+      
+      // Создаем URL для отправки сообщения в Telegram
+      const encodedMessage = encodeURIComponent(fullMessage);
+      const url = `https://t.me/${SUPPORT_USERNAME}?text=${encodedMessage}`;
+      
+      // Пытаемся открыть через Telegram WebApp API
       const tg = window.Telegram && window.Telegram.WebApp;
-      if(tg && tg.openTelegramLink){ tg.openTelegramLink(url); }
-      else { location.href = url; }
+      if(tg && tg.openLink){
+        tg.openLink(url);
+      } else {
+        // Fallback - открываем в новом окне
+        window.open(url, '_blank');
+      }
     };
   }
 

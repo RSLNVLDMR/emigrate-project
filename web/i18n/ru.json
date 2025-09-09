@@ -88,11 +88,11 @@
   "consult_title": "Связаться с консультантом",
   "consult_topic": "Коротко опишите запрос",
   "consult_msg": "Сообщение/детали",
-  "consult_open_chat": "Открыть чат в Telegram",
-  "consult_note": "Мы сформируем черновик обращения и откроем чат с ботом.",
+  "consult_send_message": "Отправить сообщение консультанту",
+  "consult_note": "Сообщение будет отправлено консультанту @emigrate_support в Telegram.",
   "consult_topic_ph": "Например: продление карты, смена работы",
   "consult_msg_ph": "Опишите ситуацию...",
-  "consult_err_topic": "Опишите ваш запрос",
+  "consult_err_topic": "Пожалуйста, укажите тему запроса",
 
   "legal_title": "Политика конфиденциальности и условия",
 
