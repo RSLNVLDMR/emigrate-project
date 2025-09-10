@@ -14,9 +14,9 @@ function envApiKey() {
   return process.env.OPENAI_API_KEY || process.env.OPEN_API_KEY || process.env.OPEN_AI_KEY || process.env.OPENAI_KEY || process.env.OPENAI;
 }
 const openai = new OpenAI({ apiKey: envApiKey() });
-pdfjsLib.GlobalWorkerOptions.workerSrc = require.resolve('pdfjs-dist/legacy/build/pdf.worker.mjs');
 
-export const config = { runtime: 'edge' }; // быстрый воркер
+// ВАЖНО: Node-рантайм — без edge-конфига
+pdfjsLib.GlobalWorkerOptions.workerSrc = require.resolve('pdfjs-dist/legacy/build/pdf.worker.mjs');
 
 function toU8(buf){ return buf instanceof Uint8Array ? buf : new Uint8Array(buf); }
 function iso(d){ return new Date(d).toISOString(); }
@@ -95,7 +95,7 @@ path: ${context.path||'general'}
 applicationDate: ${context.applicationDate||new Date().toISOString().slice(0,10)}
 Return STRICT JSON per schema.` },
     { type:'text', text: `SCHEMA:\n${JSON.stringify(schema)}` },
-    { type:'text', text: `CHECKLIST FOR TYPE:\n${JSON.stringify(rulesForType, null, 2)}` },
+    { type:'text', text: `CHECKLIST FOR TYPE:\n${JSON.stringify(rulesForType, null, 2)}` }
   ];
   if(ocrText && ocrText.trim().length){
     userParts.push({ type:'text', text:`OCR_TEXT:\n${ocrText.slice(0,20000)}` });
@@ -123,78 +123,96 @@ async function callLLM({ messages }){
   return json;
 }
 
-export default async function handler(req){
-  if(req.method!=='GET') return new Response(JSON.stringify({ error:'Method not allowed' }), { status:405 });
-  if(!envApiKey()) return new Response(JSON.stringify({ error:'OPENAI_API_KEY not set' }), { status:500 });
-
-  // Выбираем matured jobs
-  const all = await list({ prefix: 'jobs/' });
-  const now = Date.now();
-  const matured = [];
-  for(const it of all.blobs){
-    if(!it.pathname.endsWith('.json')) continue;
-    const job = await fetchJsonBlob(it.pathname);
-    if(!job) continue;
-    if(job.status==='queued' && new Date(job.runAt).getTime()<=now){
-      matured.push(job);
-    }
+export default async function handler(req, res){
+  if(req.method!=='GET'){
+    res.statusCode = 405;
+    res.setHeader('content-type','application/json; charset=utf-8');
+    res.end(JSON.stringify({ error:'Method not allowed' }));
+    return;
+  }
+  if(!envApiKey()){
+    res.statusCode = 500;
+    res.setHeader('content-type','application/json; charset=utf-8');
+    res.end(JSON.stringify({ error:'OPENAI_API_KEY not set' }));
+    return;
   }
 
-  for(const job of matured){
-    // Помечаем processing
-    job.status = 'processing';
-    await put(`jobs/${job.id}.json`, JSON.stringify(job), { access:'private', contentType:'application/json' });
-
-    try{
-      // собираем OCR
-      const pdfs = job.files.filter(f=>f.mimetype==='application/pdf');
-      const imgs = job.files.filter(f=>f.mimetype?.startsWith('image/'));
-      let ocrText = '';
-      let mergedJPEG = null;
-
-      if(pdfs.length===1){
-        const buf = await fetchBuffer(pdfs[0].key);
-        try{ ocrText = await pdfExtractText(buf); }catch{}
-        try{ mergedJPEG = await pdfRenderMergedJPEG(buf); }catch{}
-      } else if(imgs.length>=1){
-        const buffers = [];
-        for(const im of imgs){ buffers.push(await fetchBuffer(im.key)); }
-        // normalize images through sharp
-        for(let i=0;i<buffers.length;i++){
-          buffers[i] = await sharp(buffers[i]).rotate().jpeg({ quality:85 }).toBuffer();
-        }
-        mergedJPEG = await mergeImagesVertically(buffers);
+  try{
+    // Выбираем matured jobs
+    const all = await list({ prefix: 'jobs/' });
+    const now = Date.now();
+    const matured = [];
+    for(const it of all.blobs){
+      if(!it.pathname.endsWith('.json')) continue;
+      const job = await fetchJsonBlob(it.pathname);
+      if(!job) continue;
+      if(job.status==='queued' && new Date(job.runAt).getTime()<=now){
+        matured.push(job);
       }
-
-      const mergedDataUrl = mergedJPEG ? `data:image/jpeg;base64,${mergedJPEG.toString('base64')}` : null;
-
-      // правила
-      const { basePrompt, schema, rules } = await loadRules();
-      const rulesForType = rules[job.docType] || { checks:[], fields:[] };
-
-      const messages = buildMessages({
-        basePrompt, schema, rulesForType,
-        context: { docType: job.docType, citizenship: job.citizenship, path: job.path, applicationDate: job.applicationDate },
-        ocrText, mergedImageDataUrl: mergedDataUrl
-      });
-      const result = await callLLM({ messages });
-
-      // сохраняем результат
-      await put(`results/${job.id}.json`, JSON.stringify({ ok:true, result }), { access:'private', contentType:'application/json' });
-
-      // чистим исходники
-      for(const f of job.files){ await del(f.key).catch(()=>{}); }
-
-      // завершаем job
-      job.status = 'done';
-      job.finishedAt = iso(new Date());
-      await put(`jobs/${job.id}.json`, JSON.stringify(job), { access:'private', contentType:'application/json' });
-    } catch(e){
-      job.status = 'error';
-      job.error = e.message || 'processing error';
-      await put(`jobs/${job.id}.json`, JSON.stringify(job), { access:'private', contentType:'application/json' });
     }
-  }
 
-  return new Response(JSON.stringify({ ok:true, processed: matured.map(j=>j.id) }), { status:200, headers:{ 'content-type':'application/json; charset=utf-8' } });
+    for(const job of matured){
+      // Помечаем processing
+      job.status = 'processing';
+      await put(`jobs/${job.id}.json`, JSON.stringify(job), { access:'private', contentType:'application/json' });
+
+      try{
+        // OCR
+        const pdfs = job.files.filter(f=>f.mimetype==='application/pdf');
+        const imgs = job.files.filter(f=>f.mimetype?.startsWith('image/'));
+        let ocrText = '';
+        let mergedJPEG = null;
+
+        if(pdfs.length===1){
+          const buf = await fetchBuffer(pdfs[0].key);
+          try{ ocrText = await pdfExtractText(buf); }catch{}
+          try{ mergedJPEG = await pdfRenderMergedJPEG(buf); }catch{}
+        } else if(imgs.length>=1){
+          const buffers = [];
+          for(const im of imgs){ buffers.push(await fetchBuffer(im.key)); }
+          for(let i=0;i<buffers.length;i++){
+            buffers[i] = await sharp(buffers[i]).rotate().jpeg({ quality:85 }).toBuffer();
+          }
+          mergedJPEG = await mergeImagesVertically(buffers);
+        }
+
+        const mergedDataUrl = mergedJPEG ? `data:image/jpeg;base64,${mergedJPEG.toString('base64')}` : null;
+
+        // Правила
+        const { basePrompt, schema, rules } = await loadRules();
+        const rulesForType = rules[job.docType] || { checks:[], fields:[] };
+
+        const messages = buildMessages({
+          basePrompt, schema, rulesForType,
+          context: { docType: job.docType, citizenship: job.citizenship, path: job.path, applicationDate: job.applicationDate },
+          ocrText, mergedImageDataUrl: mergedDataUrl
+        });
+        const result = await callLLM({ messages });
+
+        // Сохраняем результат
+        await put(`results/${job.id}.json`, JSON.stringify({ ok:true, result }), { access:'private', contentType:'application/json' });
+
+        // Чистим исходники
+        for(const f of job.files){ await del(f.key).catch(()=>{}); }
+
+        // Завершаем job
+        job.status = 'done';
+        job.finishedAt = iso(new Date());
+        await put(`jobs/${job.id}.json`, JSON.stringify(job), { access:'private', contentType:'application/json' });
+
+      } catch(e){
+        job.status = 'error';
+        job.error = e.message || 'processing error';
+        await put(`jobs/${job.id}.json`, JSON.stringify(job), { access:'private', contentType:'application/json' });
+      }
+    }
+
+    res.statusCode = 200;
+    res.setHeader('content-type','application/json; charset=utf-8');
+    res.end(JSON.stringify({ ok:true, processed: matured.map(j=>j.id) }));
+  } catch (e){
+    res.statusCode = 500;
+    res.setHeader('content-type','application/json; charset=utf-8');
+    res.end(JSON.stringify({ error: e.message || 'internal error' }));
+  }
 }
