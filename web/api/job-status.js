@@ -1,24 +1,34 @@
 import { get } from '@vercel/blob';
 
-export const config = { runtime: 'edge' };
+export default async function handler(req, res) {
+  try {
+    const jobId = (req.query && req.query.jobId) || new URL(req.url, 'http://localhost').searchParams.get('jobId');
+    if (!jobId) {
+      res.status(400).json({ error: 'jobId required' });
+      return;
+    }
 
-async function fetchJson(key){
-  const b = await get(key);
-  if(!b?.downloadUrl) return null;
-  const r = await fetch(b.downloadUrl);
-  if(!r.ok) return null;
-  return await r.json();
+    const job = await fetchJson(`jobs/${jobId}.json`);
+    if (!job) {
+      res.status(404).json({ error: 'job not found' });
+      return;
+    }
+
+    if (job.status === 'done') {
+      const rst = await fetchJson(`results/${jobId}.json`);
+      res.status(200).json({ status: 'done', result: rst?.result });
+      return;
+    }
+    res.status(200).json({ status: job.status || 'queued' });
+  } catch (e) {
+    res.status(500).json({ error: e.message || 'internal error' });
+  }
 }
 
-export default async function handler(req){
-  const { searchParams } = new URL(req.url);
-  const jobId = searchParams.get('jobId') || '';
-  if(!jobId) return new Response(JSON.stringify({ error:'jobId required' }), { status:400 });
-  const job = await fetchJson(`jobs/${jobId}.json`);
-  if(!job) return new Response(JSON.stringify({ error:'job not found' }), { status:404 });
-  if(job.status === 'done'){
-    const res = await fetchJson(`results/${jobId}.json`);
-    return new Response(JSON.stringify({ status:'done', result: res?.result }), { status:200, headers:{ 'content-type':'application/json; charset=utf-8' } });
-  }
-  return new Response(JSON.stringify({ status: job.status || 'queued' }), { status:200, headers:{ 'content-type':'application/json; charset=utf-8' } });
+async function fetchJson(key) {
+  const b = await get(key);
+  if (!b?.downloadUrl) return null;
+  const r = await fetch(b.downloadUrl);
+  if (!r.ok) return null;
+  return await r.json();
 }
