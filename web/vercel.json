@@ -3,19 +3,11 @@
     { "source": "/", "destination": "/index.html" }
   ],
   "functions": {
-    "api/cron-run.js": {
-      "runtime": "nodejs20.x",
-      "includeFiles": "node_modules/pdfjs-dist/legacy/build/pdf.worker.mjs"
-    },
-    "api/verify-document.js": {
-      "runtime": "nodejs20.x",
-      "includeFiles": "node_modules/pdfjs-dist/legacy/build/pdf.worker.mjs"
-    },
-    "api/job-status.js": {
+    "api/**/*.js": {
       "runtime": "nodejs20.x",
       "includeFiles": "node_modules/pdfjs-dist/legacy/build/pdf.worker.mjs"
     }
-  },
+  ],
   "headers": [
     {
       "source": "/(.*)",
@@ -23,8 +15,5 @@
         { "key": "Cache-Control", "value": "public, max-age=0, must-revalidate" }
       ]
     }
-  ],
-  "crons": [
-    { "path": "/api/cron-run", "schedule": "*/15 * * * *" }
   ]
 }
