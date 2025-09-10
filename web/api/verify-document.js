@@ -5,7 +5,7 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 import formidable from 'formidable';
 import OpenAI from 'openai';
 import sharp from 'sharp';
-import { createCanvas, loadImage } from '@napi-rs/canvas';
+import { createCanvas } from '@napi-rs/canvas';
 import * as pdfjsLib from 'pdfjs-dist/legacy/build/pdf.mjs';
 import { createRequire } from 'node:module';
 const require = createRequire(import.meta.url);
@@ -52,7 +52,6 @@ async function parseForm(req){
 
 function sumSize(files){ return files.reduce((a,f)=>a+(f.size||0),0); }
 async function readTmp(fp){ const b = await fsp.readFile(fp); fsp.unlink(fp).catch(()=>{}); return b; }
-function extOf(name='file'){ return (name.split('.').pop()||'').toLowerCase(); }
 
 async function tryPdfParseText(buf){
   try{
@@ -66,8 +65,7 @@ async function tryPdfParseText(buf){
 
 async function pdfExtractTextViaPdfjs(u8){
   const doc = await pdfjsLib.getDocument({ data: toU8(u8) }).promise;
-  const pages = doc.numPages;
-  if(pages>20) throw new Error('PDF has more than 20 pages');
+  const pages = Math.min(doc.numPages, 20);
   let all = '';
   for(let i=1;i<=pages;i++){
     const page = await doc.getPage(i);
@@ -77,41 +75,47 @@ async function pdfExtractTextViaPdfjs(u8){
   return all.trim();
 }
 
-async function pdfRenderMergedJPEG(u8, maxPages=20, scale=2.2){
+// ⬇️ Рендер страниц PDF в PNG буферы
+async function renderPdfPages(u8, maxPages=10, scale=2.0){
   const doc = await pdfjsLib.getDocument({ data: toU8(u8) }).promise;
   const pages = Math.min(doc.numPages, maxPages);
-  const images = [];
+  const out = [];
   for(let i=1;i<=pages;i++){
     const page = await doc.getPage(i);
     const viewport = page.getViewport({ scale });
     const canvas = createCanvas(Math.max(1, Math.floor(viewport.width)), Math.max(1, Math.floor(viewport.height)));
     const ctx = canvas.getContext('2d');
     await page.render({ canvasContext: ctx, viewport }).promise;
-    images.push(canvas.toBuffer('image/png'));
+    out.push(canvas.toBuffer('image/png'));
   }
-  return await mergeImagesVertically(images);
+  return out;
 }
 
-async function mergeImagesVertically(buffers){
-  const imgs = [];
-  for(const b of buffers){ imgs.push(await loadImage(b)); }
-  const width = Math.max(...imgs.map(i=>i.width));
-  const height = imgs.reduce((a,i)=>a+i.height,0);
-  const canvas = createCanvas(width, height);
-  const ctx = canvas.getContext('2d');
-  let y=0;
-  for(const im of imgs){
-    ctx.drawImage(im, 0, y);
-    y += im.height;
+// ⬇️ Склейка вертикально ТОЛЬКО через sharp (без loadImage)
+async function mergeImagesVerticallySharp(pngBuffers){
+  // получаем размеры
+  const metas = await Promise.all(pngBuffers.map(b => sharp(b).metadata()));
+  const width = Math.max(...metas.map(m => m.width || 1));
+  let y = 0;
+  const composite = [];
+  for (let i=0; i<pngBuffers.length; i++){
+    const h = metas[i].height || 1;
+    composite.push({ input: pngBuffers[i], top: y, left: 0 });
+    y += h;
   }
-  const jpg = canvas.toBuffer('image/jpeg', { quality: 0.9 });
-  return await sharp(jpg).rotate().jpeg({ quality: 85 }).toBuffer();
-}
-
-async function imagesToMergedJPEG(buffers){
-  const normalized = [];
-  for(const b of buffers){ normalized.push(await sharp(b).rotate().jpeg({ quality:85 }).toBuffer()); }
-  return await mergeImagesVertically(normalized);
+  // создаём пустой фон (белый)
+  const base = sharp({
+    create: {
+      width,
+      height: y,
+      channels: 3,
+      background: { r: 255, g: 255, b: 255 }
+    }
+  });
+  // композитим и нормализуем
+  const out = await base.composite(composite).jpeg({ quality: 85 }).toBuffer();
+  // поворот авто
+  return await sharp(out).rotate().jpeg({ quality: 85 }).toBuffer();
 }
 
 function estimateOcrQuality(text){
@@ -181,24 +185,33 @@ async function processNow({ files, docType, citizenship, pathName, applicationDa
   if(pdfs.length===1){
     const buf = await readTmp(pdfs[0].filepath);
 
-    // 1) «Живой» текст из PDF (быстро)
+    // 1) «Живой» текст из PDF
     ocrText = await tryPdfParseText(buf);
 
-    // 2) Если текста мало — пробуем через pdfjs getTextContent (иногда лучше)
+    // 2) Если пусто/мало — pdfjs getTextContent
     if(!ocrText || ocrText.replace(/\s+/g,' ').length < 200){
       try{
         const t2 = await pdfExtractTextViaPdfjs(buf);
         if(t2 && t2.replace(/\s+/g,' ').length > (ocrText?.length||0)) ocrText = t2;
-      }catch{ /* ignore */ }
+      }catch{}
     }
 
-    // 3) Подготовим слитый JPEG (подписи/печати/таблицы)
-    try{ mergedJPEG = await pdfRenderMergedJPEG(buf); }catch{ mergedJPEG = null; }
+    // 3) JPEG из первых 10 страниц — через sharp-композит (надёжнее на Vercel)
+    try{
+      const pagePngs = await renderPdfPages(buf, 10, 2.0);
+      if(pagePngs.length){
+        mergedJPEG = await mergeImagesVerticallySharp(pagePngs);
+      }
+    }catch{}
 
   } else if(imgs.length>=1){
-    const bufs = [];
-    for(const im of imgs){ bufs.push(await readTmp(im.filepath)); }
-    mergedJPEG = await imagesToMergedJPEG(bufs);
+    // изображения → нормализуем и склеиваем
+    const normalized = [];
+    for(const im of imgs){
+      const b = await readTmp(im.filepath);
+      normalized.push(await sharp(b).rotate().jpeg({ quality: 85 }).toBuffer());
+    }
+    mergedJPEG = await mergeImagesVerticallySharp(normalized);
   } else {
     throw new Error('Attach 1 PDF or up to 20 images');
   }
