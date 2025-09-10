@@ -7,27 +7,39 @@ import sharp from 'sharp';
 import { createCanvas, loadImage } from '@napi-rs/canvas';
 import * as pdfjsLib from 'pdfjs-dist/legacy/build/pdf.mjs';
 import { put } from '@vercel/blob';
+import { createRequire } from 'module';               // ⬅️ для require.resolve в ESM
+const require = createRequire(import.meta.url);
+
+// --- фикс рантайма и лимита тела запроса (Node.js 20, без Edge)
+export const config = {
+  runtime: 'nodejs20.x',
+  api: { bodyParser: false, sizeLimit: '35mb' }       // мы сами проверяем лимит 30MB
+};
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const root = path.join(__dirname, '..');
 
 function envApiKey() {
-  return process.env.OPENAI_API_KEY || process.env.OPEN_API_KEY || process.env.OPEN_AI_KEY || process.env.OPENAI_KEY || process.env.OPENAI;
+  return (
+    process.env.OPENAI_API_KEY ||
+    process.env.OPEN_API_KEY ||
+    process.env.OPEN_AI_KEY ||
+    process.env.OPENAI_KEY ||
+    process.env.OPENAI
+  );
 }
 const openai = new OpenAI({ apiKey: envApiKey() });
 
-pdfjsLib.GlobalWorkerOptions.workerSrc = require.resolve('pdfjs-dist/legacy/build/pdf.worker.mjs');
-
-export const config = {
-  api: { bodyParser: false, sizeLimit: '35mb' } // чуть выше лимита, мы сами проверим 30MB
-};
+// --- pdfjs worker под Node (через require.resolve)
+pdfjsLib.GlobalWorkerOptions.workerSrc = require.resolve(
+  'pdfjs-dist/legacy/build/pdf.worker.mjs'
+);
 
 function toU8(buf){ return buf instanceof Uint8Array ? buf : new Uint8Array(buf); }
 
 async function readFileBuffer(fp){
   const buf = await fsp.readFile(fp);
-  // удалить сразу
-  fsp.unlink(fp).catch(()=>{});
+  fsp.unlink(fp).catch(()=>{}); // удалить временный файл
   return buf;
 }
 
@@ -67,11 +79,10 @@ async function pdfRenderMergedJPEG(u8){
   const doc = await pdfjsLib.getDocument({ data: toU8(u8) }).promise;
   const pages = doc.numPages;
   if(pages>20) throw new Error('PDF has more than 20 pages');
-  // Рендерим каждую страницу в PNG и склеиваем вертикально
   const images = [];
   for(let i=1;i<=pages;i++){
     const page = await doc.getPage(i);
-    const viewport = page.getViewport({ scale: 2.0 }); // Retina-ish
+    const viewport = page.getViewport({ scale: 2.0 });
     const canvas = createCanvas(viewport.width, viewport.height);
     const ctx = canvas.getContext('2d');
     await page.render({ canvasContext: ctx, viewport }).promise;
@@ -94,13 +105,11 @@ async function mergeImagesVertically(buffers){
     y += im.height;
   }
   const jpg = canvas.toBuffer('image/jpeg', { quality: 0.9 });
-  // Нормализуем через sharp
   const normalized = await sharp(jpg).rotate().jpeg({ quality: 85 }).toBuffer();
   return normalized;
 }
 
 async function imagesToMergedJPEG(buffers){
-  // normalize + merge
   const normalized = [];
   for(const b of buffers){
     const out = await sharp(b).rotate().jpeg({ quality: 85 }).toBuffer();
@@ -138,7 +147,7 @@ path: ${context.path||'general'}
 applicationDate: ${context.applicationDate||new Date().toISOString().slice(0,10)}
 Return STRICT JSON per schema. If data insufficient: mark checks passed=false with helpful fixTip. If language != PL: advise sworn translation.` },
     { type:'text', text: `SCHEMA:\n${JSON.stringify(schema)}` },
-    { type:'text', text: `CHECKLIST FOR TYPE:\n${JSON.stringify(rulesForType, null, 2)}` },
+    { type:'text', text: `CHECKLIST FOR TYPE:\n${JSON.stringify(rulesForType, null, 2)}` }
   ];
   if(ocrText && ocrText.trim().length){
     userParts.push({ type:'text', text:`OCR_TEXT (raw, may include noise):\n${ocrText.slice(0, 20000)}` });
@@ -153,19 +162,18 @@ Return STRICT JSON per schema. If data insufficient: mark checks passed=false wi
 }
 
 async function callLLMBuildJSON({ messages }){
-  // Один вызов: модель анализирует текст/изображение и возвращает JSON по схеме
   const resp = await openai.chat.completions.create({
     model: 'gpt-4o-mini',
     temperature: 0.1,
     messages
   });
   const out = resp.choices?.[0]?.message?.content || '{}';
-  // Попытка выдрать JSON
   const start = out.indexOf('{');
   const end = out.lastIndexOf('}');
   let json = {};
   if(start>=0 && end>start){
-    try { json = JSON.parse(out.slice(start, end+1)); } catch(e){ json = { verdict:{status:'uncertain', summary:'Model returned non-JSON'}, raw: out }; }
+    try { json = JSON.parse(out.slice(start, end+1)); }
+    catch(e){ json = { verdict:{status:'uncertain', summary:'Model returned non-JSON'}, raw: out }; }
   } else {
     json = { verdict:{status:'uncertain', summary:'No JSON found'}, raw: out };
   }
@@ -173,7 +181,6 @@ async function callLLMBuildJSON({ messages }){
 }
 
 async function processNow({ files, docType, citizenship, pathName, applicationDate }){
-  // prepare OCR
   const pdfs = files.filter(f=>f.mimetype==='application/pdf');
   const imgs = files.filter(f=>f.mimetype?.startsWith('image/'));
   let ocrText = '';
@@ -181,7 +188,6 @@ async function processNow({ files, docType, citizenship, pathName, applicationDa
 
   if(pdfs.length===1){
     const buf = await readFileBuffer(pdfs[0].filepath);
-    // try text first
     let text = '';
     try{
       const t = await pdfExtractText(buf);
@@ -191,7 +197,6 @@ async function processNow({ files, docType, citizenship, pathName, applicationDa
       mergedJPEG = await pdfRenderMergedJPEG(buf);
     } else {
       ocrText = text;
-      // рендерим тоже (для печатных полей/подписей)
       try { mergedJPEG = await pdfRenderMergedJPEG(buf); } catch(e){}
     }
   } else if(imgs.length>=1){
@@ -214,7 +219,6 @@ async function processNow({ files, docType, citizenship, pathName, applicationDa
     mergedImageDataUrl: mergedDataUrl
   });
   const result = await callLLMBuildJSON({ messages });
-  // enrichment: add simple ocrQuality
   result.ocrQuality = result.ocrQuality || estimateOcrQuality(ocrText||'');
   result.docType = result.docType || docType;
   return result;
@@ -225,10 +229,7 @@ async function uploadBlob(key, buf, contentType){
   return { url, key };
 }
 
-function addMinutes(date, minutes){
-  return new Date(date.getTime() + minutes*60000);
-}
-
+function addMinutes(date, minutes){ return new Date(date.getTime() + minutes*60000); }
 function iso(d){ return new Date(d).toISOString(); }
 
 function bad(res, code, error){
@@ -260,7 +261,6 @@ export default async function handler(req, res){
     if(pdfs.length>1) return bad(res, 400, 'Only one PDF allowed');
 
     if(mode==='queued'){
-      // загружаем файлы в Blob, создаём job JSON
       const jobId = Math.random().toString(36).slice(2)+Math.random().toString(36).slice(2);
       const uploaded = [];
       for(let i=0;i<files.length;i++){
