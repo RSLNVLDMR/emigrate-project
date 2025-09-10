@@ -6,15 +6,11 @@ import OpenAI from 'openai';
 import sharp from 'sharp';
 import { createCanvas, loadImage } from '@napi-rs/canvas';
 import * as pdfjsLib from 'pdfjs-dist/legacy/build/pdf.mjs';
-import { put } from '@vercel/blob';
-import { createRequire } from 'module';               // ⬅️ для require.resolve в ESM
+import { createRequire } from 'module';
 const require = createRequire(import.meta.url);
 
-// --- фикс рантайма и лимита тела запроса (Node.js 20, без Edge)
-export const config = {
-  runtime: 'nodejs20.x',
-  api: { bodyParser: false, sizeLimit: '35mb' }       // мы сами проверяем лимит 30MB
-};
+// ── фикс рантайма: Node.js (НЕ edge)
+export const config = { runtime: 'nodejs' };
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const root = path.join(__dirname, '..');
@@ -30,20 +26,15 @@ function envApiKey() {
 }
 const openai = new OpenAI({ apiKey: envApiKey() });
 
-// --- pdfjs worker под Node (через require.resolve)
+// ── pdfjs worker под Node (через require.resolve)
 pdfjsLib.GlobalWorkerOptions.workerSrc = require.resolve(
   'pdfjs-dist/legacy/build/pdf.worker.mjs'
 );
 
 function toU8(buf){ return buf instanceof Uint8Array ? buf : new Uint8Array(buf); }
 
-async function readFileBuffer(fp){
-  const buf = await fsp.readFile(fp);
-  fsp.unlink(fp).catch(()=>{}); // удалить временный файл
-  return buf;
-}
-
 async function parseForm(req){
+  // formidable стримит во временные файлы — подходит для крупных аплоадов
   const form = formidable({ multiples: true, maxFileSize: 35*1024*1024 });
   return new Promise((resolve,reject)=>{
     form.parse(req, (err, fields, files)=>{
@@ -58,8 +49,13 @@ async function parseForm(req){
   });
 }
 
-function sumSize(files){ return files.reduce((a,f)=>a+ (f.size||0), 0); }
-function extOf(name='file'){ return (name.split('.').pop()||'').toLowerCase(); }
+function sumSize(files){ return files.reduce((a,f)=>a+(f.size||0),0); }
+
+async function readTmp(fp){
+  const buf = await fsp.readFile(fp);
+  fsp.unlink(fp).catch(()=>{});
+  return buf;
+}
 
 async function pdfExtractText(u8){
   const doc = await pdfjsLib.getDocument({ data: toU8(u8) }).promise;
@@ -69,10 +65,9 @@ async function pdfExtractText(u8){
   for(let i=1;i<=pages;i++){
     const page = await doc.getPage(i);
     const txt = await page.getTextContent();
-    const str = txt.items.map(it=>it.str).join('\n');
-    all += str+'\n';
+    all += txt.items.map(it=>it.str).join('\n') + '\n';
   }
-  return { pages, text: all.trim() };
+  return all.trim();
 }
 
 async function pdfRenderMergedJPEG(u8){
@@ -86,8 +81,7 @@ async function pdfRenderMergedJPEG(u8){
     const canvas = createCanvas(viewport.width, viewport.height);
     const ctx = canvas.getContext('2d');
     await page.render({ canvasContext: ctx, viewport }).promise;
-    const png = canvas.toBuffer('image/png');
-    images.push(png);
+    images.push(canvas.toBuffer('image/png'));
   }
   return await mergeImagesVertically(images);
 }
@@ -100,22 +94,15 @@ async function mergeImagesVertically(buffers){
   const canvas = createCanvas(width, height);
   const ctx = canvas.getContext('2d');
   let y=0;
-  for(const im of imgs){
-    ctx.drawImage(im, 0, y);
-    y += im.height;
-  }
+  for(const im of imgs){ ctx.drawImage(im, 0, y); y+=im.height; }
   const jpg = canvas.toBuffer('image/jpeg', { quality: 0.9 });
-  const normalized = await sharp(jpg).rotate().jpeg({ quality: 85 }).toBuffer();
-  return normalized;
+  return await sharp(jpg).rotate().jpeg({ quality: 85 }).toBuffer();
 }
 
 async function imagesToMergedJPEG(buffers){
-  const normalized = [];
-  for(const b of buffers){
-    const out = await sharp(b).rotate().jpeg({ quality: 85 }).toBuffer();
-    normalized.push(out);
-  }
-  return await mergeImagesVertically(normalized);
+  const norm = [];
+  for(const b of buffers){ norm.push(await sharp(b).rotate().jpeg({ quality:85 }).toBuffer()); }
+  return await mergeImagesVertically(norm);
 }
 
 function estimateOcrQuality(text){
@@ -129,12 +116,11 @@ function estimateOcrQuality(text){
 }
 
 async function loadRules(){
+  // читаем соседние файлы правил (они попадут в бандл)
   const basePrompt = await fsp.readFile(path.join(root, 'rules', 'prompt.base.txt'), 'utf8');
   const schema = JSON.parse(await fsp.readFile(path.join(root, 'rules', 'schema.verify.json'), 'utf8'));
   const rules = JSON.parse(await fsp.readFile(path.join(root, 'rules', 'doc_rules.json'), 'utf8'));
-  const income = JSON.parse(await fsp.readFile(path.join(root, 'rules', 'context', 'income_thresholds.json'), 'utf8'));
-  const fees = JSON.parse(await fsp.readFile(path.join(root, 'rules', 'context', 'fees.json'), 'utf8'));
-  return { basePrompt, schema, rules, income, fees };
+  return { basePrompt, schema, rules };
 }
 
 function buildMessages({ basePrompt, schema, rulesForType, context, ocrText, mergedImageDataUrl }) {
@@ -145,15 +131,15 @@ function buildMessages({ basePrompt, schema, rulesForType, context, ocrText, mer
 citizenship: ${context.citizenship||'unknown'}
 path: ${context.path||'general'}
 applicationDate: ${context.applicationDate||new Date().toISOString().slice(0,10)}
-Return STRICT JSON per schema. If data insufficient: mark checks passed=false with helpful fixTip. If language != PL: advise sworn translation.` },
+Return STRICT JSON per schema. If data insufficient: set passed=false with helpful fixTip. If language != PL: advise sworn translation.` },
     { type:'text', text: `SCHEMA:\n${JSON.stringify(schema)}` },
     { type:'text', text: `CHECKLIST FOR TYPE:\n${JSON.stringify(rulesForType, null, 2)}` }
   ];
-  if(ocrText && ocrText.trim().length){
-    userParts.push({ type:'text', text:`OCR_TEXT (raw, may include noise):\n${ocrText.slice(0, 20000)}` });
+  if(ocrText && ocrText.trim()){
+    userParts.push({ type:'text', text:`OCR_TEXT (raw, may include noise):\n${ocrText.slice(0,20000)}` });
   }
   if(mergedImageDataUrl){
-    userParts.push({ type:'image_url', image_url: { url: mergedImageDataUrl } });
+    userParts.push({ type:'image_url', image_url:{ url: mergedImageDataUrl } });
   }
   return [
     { role:'system', content: sys },
@@ -161,47 +147,39 @@ Return STRICT JSON per schema. If data insufficient: mark checks passed=false wi
   ];
 }
 
-async function callLLMBuildJSON({ messages }){
+async function callLLM({ messages }){
   const resp = await openai.chat.completions.create({
     model: 'gpt-4o-mini',
     temperature: 0.1,
     messages
   });
   const out = resp.choices?.[0]?.message?.content || '{}';
-  const start = out.indexOf('{');
-  const end = out.lastIndexOf('}');
+  const s = out.indexOf('{'), e = out.lastIndexOf('}');
   let json = {};
-  if(start>=0 && end>start){
-    try { json = JSON.parse(out.slice(start, end+1)); }
-    catch(e){ json = { verdict:{status:'uncertain', summary:'Model returned non-JSON'}, raw: out }; }
-  } else {
-    json = { verdict:{status:'uncertain', summary:'No JSON found'}, raw: out };
-  }
+  if(s>=0 && e>s){ try{ json = JSON.parse(out.slice(s,e+1)); }catch{ json={ verdict:{status:'uncertain',summary:'parse error'}, raw: out }; } }
+  else { json = { verdict:{status:'uncertain',summary:'no json'}, raw: out }; }
   return json;
 }
 
 async function processNow({ files, docType, citizenship, pathName, applicationDate }){
   const pdfs = files.filter(f=>f.mimetype==='application/pdf');
   const imgs = files.filter(f=>f.mimetype?.startsWith('image/'));
+  if(pdfs.length && imgs.length) throw new Error('Upload either PDF or images, not both');
+  if(pdfs.length>1) throw new Error('Only one PDF allowed');
+
   let ocrText = '';
   let mergedJPEG = null;
 
   if(pdfs.length===1){
-    const buf = await readFileBuffer(pdfs[0].filepath);
-    let text = '';
+    const buf = await readTmp(pdfs[0].filepath);
     try{
       const t = await pdfExtractText(buf);
-      text = t.text;
-    }catch(e){ text=''; }
-    if(!text || text.replace(/\s+/g,' ').length<200){
-      mergedJPEG = await pdfRenderMergedJPEG(buf);
-    } else {
-      ocrText = text;
-      try { mergedJPEG = await pdfRenderMergedJPEG(buf); } catch(e){}
-    }
+      if(t && t.replace(/\s+/g,' ').length>=200) ocrText = t;
+    }catch{}
+    try{ mergedJPEG = await pdfRenderMergedJPEG(buf); }catch{}
   } else if(imgs.length>=1){
     const bufs = [];
-    for(const im of imgs){ bufs.push(await readFileBuffer(im.filepath)); }
+    for(const im of imgs){ bufs.push(await readTmp(im.filepath)); }
     mergedJPEG = await imagesToMergedJPEG(bufs);
   } else {
     throw new Error('Attach 1 PDF or up to 20 images');
@@ -210,6 +188,7 @@ async function processNow({ files, docType, citizenship, pathName, applicationDa
   const mergedDataUrl = mergedJPEG ? `data:image/jpeg;base64,${mergedJPEG.toString('base64')}` : null;
   const { basePrompt, schema, rules } = await loadRules();
   const rulesForType = rules[docType] || { checks:[], fields:[] };
+
   const messages = buildMessages({
     basePrompt,
     schema,
@@ -218,19 +197,12 @@ async function processNow({ files, docType, citizenship, pathName, applicationDa
     ocrText,
     mergedImageDataUrl: mergedDataUrl
   });
-  const result = await callLLMBuildJSON({ messages });
+
+  const result = await callLLM({ messages });
   result.ocrQuality = result.ocrQuality || estimateOcrQuality(ocrText||'');
   result.docType = result.docType || docType;
   return result;
 }
-
-async function uploadBlob(key, buf, contentType){
-  const { url } = await put(key, buf, { access: 'private', contentType });
-  return { url, key };
-}
-
-function addMinutes(date, minutes){ return new Date(date.getTime() + minutes*60000); }
-function iso(d){ return new Date(d).toISOString(); }
 
 function bad(res, code, error){
   res.statusCode = code;
@@ -240,55 +212,24 @@ function bad(res, code, error){
 
 export default async function handler(req, res){
   if(req.method!=='POST') return bad(res, 405, 'Method not allowed');
+
   try{
+    if(!envApiKey()) return bad(res, 500, 'OPENAI_API_KEY not set');
+
     const { fields, files } = await parseForm(req);
-    const mode = String(fields.mode||'').toLowerCase()==='queued' ? 'queued' : 'now';
     const docType = String(fields.docType||'').trim() || 'unknown';
     const citizenship = String(fields.citizenship||'').trim() || '';
     const pathName = String(fields.path||'').trim() || '';
     const applicationDate = String(fields.applicationDate||'').trim() || '';
-
-    if(!envApiKey()) return bad(res, 500, 'OPENAI_API_KEY not set');
 
     if(!files.length) return bad(res, 400, 'No files');
     if(files.length>20) return bad(res, 400, 'Max 20 files');
     const total = sumSize(files);
     if(total > 30*1024*1024) return bad(res, 400, 'Total size exceeds 30MB');
 
-    const pdfs = files.filter(f=>f.mimetype==='application/pdf');
-    const imgs = files.filter(f=>f.mimetype?.startsWith('image/'));
-    if(pdfs.length && imgs.length) return bad(res, 400, 'Upload either PDF or images, not both');
-    if(pdfs.length>1) return bad(res, 400, 'Only one PDF allowed');
-
-    if(mode==='queued'){
-      const jobId = Math.random().toString(36).slice(2)+Math.random().toString(36).slice(2);
-      const uploaded = [];
-      for(let i=0;i<files.length;i++){
-        const buf = await fsp.readFile(files[i].filepath);
-        await fsp.unlink(files[i].filepath).catch(()=>{});
-        const key = `uploads/${jobId}/${i}_${files[i].originalFilename||'file'}.${extOf(files[i].originalFilename||'dat')}`;
-        const up = await uploadBlob(key, buf, files[i].mimetype || 'application/octet-stream');
-        uploaded.push({ key: up.key, url: up.url, mimetype: files[i].mimetype, size: files[i].size });
-      }
-      const runAt = addMinutes(new Date(), 23*60+50);
-      const job = {
-        id: jobId,
-        status: 'queued',
-        createdAt: iso(new Date()),
-        runAt: iso(runAt),
-        docType, citizenship, path: pathName, applicationDate,
-        files: uploaded
-      };
-      await uploadBlob(`jobs/${jobId}.json`, Buffer.from(JSON.stringify(job)), 'application/json');
-      res.setHeader('Content-Type','application/json; charset=utf-8');
-      res.end(JSON.stringify({ ok:true, jobId, runAt: job.runAt }));
-      return;
-    } else {
-      const result = await processNow({ files, docType, citizenship, pathName, applicationDate });
-      res.setHeader('Content-Type','application/json; charset=utf-8');
-      res.end(JSON.stringify({ ok:true, result }));
-      return;
-    }
+    const result = await processNow({ files, docType, citizenship, pathName, applicationDate });
+    res.setHeader('Content-Type','application/json; charset=utf-8');
+    res.end(JSON.stringify({ ok:true, result }));
   }catch(e){
     bad(res, 500, e.message || 'Internal error');
   }
