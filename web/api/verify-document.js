@@ -1,16 +1,17 @@
-import { promises as fsp } from 'fs';
-import path from 'path';
-import { fileURLToPath, pathToFileURL } from 'url';
+// web/api/verify-document.js
+import { promises as fsp } from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import formidable from 'formidable';
 import OpenAI from 'openai';
 import sharp from 'sharp';
 import { createCanvas, loadImage } from '@napi-rs/canvas';
 import * as pdfjsLib from 'pdfjs-dist/legacy/build/pdf.mjs';
-import { createRequire } from 'module';
+import { createRequire } from 'node:module';
 const require = createRequire(import.meta.url);
 
 // ── фикс рантайма: Node.js (НЕ edge)
-export const config = { runtime: 'nodejs' };
+export const config = { runtime: 'nodejs', api: { bodyParser: false, sizeLimit: '35mb' } };
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const root = path.join(__dirname, '..');
@@ -31,10 +32,11 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = pathToFileURL(
   require.resolve('pdfjs-dist/legacy/build/pdf.worker.mjs')
 ).href;
 
+// ===== helpers =====
 function toU8(buf){ return buf instanceof Uint8Array ? buf : new Uint8Array(buf); }
 
 async function parseForm(req){
-  const form = formidable({ multiples: true, maxFileSize: 35*1024*1024 });
+  const form = formidable({ multiples: true, maxFileSize: 35*1024*1024, uploadDir: '/tmp', keepExtensions: true });
   return new Promise((resolve,reject)=>{
     form.parse(req, (err, fields, files)=>{
       if(err) return reject(err);
@@ -52,7 +54,17 @@ function sumSize(files){ return files.reduce((a,f)=>a+(f.size||0),0); }
 async function readTmp(fp){ const b = await fsp.readFile(fp); fsp.unlink(fp).catch(()=>{}); return b; }
 function extOf(name='file'){ return (name.split('.').pop()||'').toLowerCase(); }
 
-async function pdfExtractText(u8){
+async function tryPdfParseText(buf){
+  try{
+    const mod = await import('pdf-parse');
+    const pdfParse = mod.default || mod;
+    const parsed = await pdfParse(buf);
+    const t = (parsed.text || '').trim();
+    return t && t.length>10 ? t : '';
+  }catch{ return ''; }
+}
+
+async function pdfExtractTextViaPdfjs(u8){
   const doc = await pdfjsLib.getDocument({ data: toU8(u8) }).promise;
   const pages = doc.numPages;
   if(pages>20) throw new Error('PDF has more than 20 pages');
@@ -65,15 +77,14 @@ async function pdfExtractText(u8){
   return all.trim();
 }
 
-async function pdfRenderMergedJPEG(u8){
+async function pdfRenderMergedJPEG(u8, maxPages=20, scale=2.2){
   const doc = await pdfjsLib.getDocument({ data: toU8(u8) }).promise;
-  const pages = doc.numPages;
-  if(pages>20) throw new Error('PDF has more than 20 pages');
+  const pages = Math.min(doc.numPages, maxPages);
   const images = [];
   for(let i=1;i<=pages;i++){
     const page = await doc.getPage(i);
-    const viewport = page.getViewport({ scale: 2.0 });
-    const canvas = createCanvas(viewport.width, viewport.height);
+    const viewport = page.getViewport({ scale });
+    const canvas = createCanvas(Math.max(1, Math.floor(viewport.width)), Math.max(1, Math.floor(viewport.height)));
     const ctx = canvas.getContext('2d');
     await page.render({ canvasContext: ctx, viewport }).promise;
     images.push(canvas.toBuffer('image/png'));
@@ -89,15 +100,18 @@ async function mergeImagesVertically(buffers){
   const canvas = createCanvas(width, height);
   const ctx = canvas.getContext('2d');
   let y=0;
-  for(const im of imgs){ ctx.drawImage(im, 0, y); y+=im.height; }
+  for(const im of imgs){
+    ctx.drawImage(im, 0, y);
+    y += im.height;
+  }
   const jpg = canvas.toBuffer('image/jpeg', { quality: 0.9 });
   return await sharp(jpg).rotate().jpeg({ quality: 85 }).toBuffer();
 }
 
 async function imagesToMergedJPEG(buffers){
-  const norm = [];
-  for(const b of buffers){ norm.push(await sharp(b).rotate().jpeg({ quality:85 }).toBuffer()); }
-  return await mergeImagesVertically(norm);
+  const normalized = [];
+  for(const b of buffers){ normalized.push(await sharp(b).rotate().jpeg({ quality:85 }).toBuffer()); }
+  return await mergeImagesVertically(normalized);
 }
 
 function estimateOcrQuality(text){
@@ -130,7 +144,7 @@ Return STRICT JSON per schema. If data insufficient: set passed=false with helpf
     { type:'text', text: `CHECKLIST FOR TYPE:\n${JSON.stringify(rulesForType, null, 2)}` }
   ];
   if(ocrText && ocrText.trim()){
-    userParts.push({ type:'text', text:`OCR_TEXT (raw, may include noise):\n${ocrText.slice(0,20000)}` });
+    userParts.push({ type:'text', text:`OCR_TEXT (raw):\n${ocrText.slice(0,20000)}` });
   }
   if(mergedImageDataUrl){
     userParts.push({ type:'image_url', image_url:{ url: mergedImageDataUrl } });
@@ -150,7 +164,7 @@ async function callLLM({ messages }){
   const out = resp.choices?.[0]?.message?.content || '{}';
   const s = out.indexOf('{'), e = out.lastIndexOf('}');
   let json = {};
-  if(s>=0 && e>s){ try{ json = JSON.parse(out.slice(s,e+1)); }catch{ json={ verdict:{status:'uncertain',summary:'parse error'}, raw: out }; } }
+  if(s>=0 && e>s){ try{ json = JSON.parse(out.slice(s,e+1)); }catch{ json={ verdict:{status:'uncertain',summary:'parse error'}, raw: out}; } }
   else { json = { verdict:{status:'uncertain',summary:'no json'}, raw: out }; }
   return json;
 }
@@ -166,11 +180,21 @@ async function processNow({ files, docType, citizenship, pathName, applicationDa
 
   if(pdfs.length===1){
     const buf = await readTmp(pdfs[0].filepath);
-    try{
-      const t = await pdfExtractText(buf);
-      if(t && t.replace(/\s+/g,' ').length>=200) ocrText = t;
-    }catch{}
-    try{ mergedJPEG = await pdfRenderMergedJPEG(buf); }catch{}
+
+    // 1) «Живой» текст из PDF (быстро)
+    ocrText = await tryPdfParseText(buf);
+
+    // 2) Если текста мало — пробуем через pdfjs getTextContent (иногда лучше)
+    if(!ocrText || ocrText.replace(/\s+/g,' ').length < 200){
+      try{
+        const t2 = await pdfExtractTextViaPdfjs(buf);
+        if(t2 && t2.replace(/\s+/g,' ').length > (ocrText?.length||0)) ocrText = t2;
+      }catch{ /* ignore */ }
+    }
+
+    // 3) Подготовим слитый JPEG (подписи/печати/таблицы)
+    try{ mergedJPEG = await pdfRenderMergedJPEG(buf); }catch{ mergedJPEG = null; }
+
   } else if(imgs.length>=1){
     const bufs = [];
     for(const im of imgs){ bufs.push(await readTmp(im.filepath)); }
@@ -210,8 +234,7 @@ export default async function handler(req, res){
   try{
     if(!envApiKey()) return bad(res, 500, 'OPENAI_API_KEY not set');
 
-    const form = await parseForm(req);
-    const { fields, files } = form;
+    const { fields, files } = await parseForm(req);
     const docType = String(fields.docType||'').trim() || 'unknown';
     const citizenship = String(fields.citizenship||'').trim() || '';
     const pathName = String(fields.path||'').trim() || '';
