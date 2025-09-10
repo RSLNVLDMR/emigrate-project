@@ -28,4 +28,3 @@
     { "path": "/api/cron-run", "schedule": "*/15 * * * *" }
   ]
 }
-
