@@ -1,11 +1,12 @@
 {
   "name": "emigrant-miniapp-web",
-  "version": "0.0.5",
+  "version": "0.0.6",
   "private": true,
   "type": "module",
   "engines": { "node": ">=18" },
   "dependencies": {
     "@napi-rs/canvas": "^0.1.57",
+    "@vercel/blob": "^0.24.1",
     "formidable": "^3.5.1",
     "openai": "^4.57.0",
     "pdf-parse": "^1.1.1",
