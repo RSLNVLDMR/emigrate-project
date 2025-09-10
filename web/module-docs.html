@@ -1,0 +1,328 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8" />
+  <title>eMigrant — Проверка документов</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
+  <script src="https://telegram.org/js/telegram-web-app.js"></script>
+  <link rel="stylesheet" href="styles.css" />
+  <style>
+    /* Минимальные стили под конкретную страницу */
+    .status{display:flex;align-items:center;gap:8px;font-size:14px}
+    .dot{width:10px;height:10px;border-radius:50%}
+    .dot.grey{background:#6b7280}.dot.amber{background:#f59e0b}.dot.green{background:#22c55e}.dot.red{background:#ef4444}
+    .mono{font-family:ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,monospace;font-size:12px;white-space:pre-wrap;word-break:break-word}
+    .fileBadges{display:flex;gap:8px;flex-wrap:wrap}
+  </style>
+</head>
+<body>
+<div class="container screen">
+
+  <div class="header">
+    <div class="h1" data-i18n="docs.title">Проверка документов</div>
+    <div class="lang" id="langSwitcher">
+      <button data-lang="ru" class="active">RU</button>
+      <button data-lang="ua">UA</button>
+      <button data-lang="by">BY</button>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="h2" data-i18n="docs.docType">Тип документа</div>
+    <div class="col">
+      <select id="docType" class="input">
+        <optgroup label="Основа">
+          <option value="wniosek">Анкета (Wniosek)</option>
+          <option value="paszport">Паспорт</option>
+          <option value="photo_biometric">Фото (биометрическое)</option>
+          <option value="oplata_skarbowa">Оплата гербового сбора</option>
+        </optgroup>
+        <optgroup label="Жильё">
+          <option value="najmu_standard">Договор аренды (обычный)</option>
+          <option value="najmu_okazjonalny">Договор аренды (okazjonalny)</option>
+          <option value="uzyczenie">Договор безвозмездного пользования</option>
+          <option value="zameldowanie">Подтверждение прописки</option>
+          <option value="akt_wlasnosci">Право собственности/акт нотариуса</option>
+          <option value="oswiadczenie_wlasciciela">Заявление владельца жилья</option>
+          <option value="hotel_dorm">Подтверждение отеля/общежития</option>
+        </optgroup>
+        <optgroup label="Работа/Учёба">
+          <option value="umowa_o_prace">Umowa o pracę</option>
+          <option value="umowa_zlecenie">Umowa zlecenie</option>
+          <option value="zezwolenie_typ_A">Zezwolenie na pracę (typ A)</option>
+          <option value="informacja_starosty">Informacja starosty</option>
+          <option value="zalacznik_nr_1">Załącznik nr 1</option>
+          <option value="zaswiadczenie_uczelnia">Справка из вуза</option>
+        </optgroup>
+        <optgroup label="Страховка/Финансы">
+          <option value="ubezpieczenie_zus">Страховка ZUS (ZUA/RCA/RMUA)</option>
+          <option value="ubezpieczenie_prywatne">Частная мед. страховка</option>
+          <option value="ubezpieczenie_nfz">Договор с NFZ</option>
+          <option value="wyciag_bankowy">Выписка из банка</option>
+          <option value="pit_11">PIT-11</option>
+          <option value="pit_37">PIT-37</option>
+        </optgroup>
+        <optgroup label="Спецрежимы">
+          <option value="pesel_ukr">PESEL UKR</option>
+          <option value="diia_pl">Diia.pl</option>
+          <option value="wiza_D21">Виза D-21 (BY)</option>
+        </optgroup>
+      </select>
+      <small class="muted" data-i18n="docs.hintType">Выберите документ, который будете проверять.</small>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="h2" data-i18n="docs.upload">Загрузка</div>
+    <div class="col">
+      <input id="file" class="input" type="file" accept="application/pdf,image/*" multiple />
+      <small class="muted" data-i18n="docs.uploadHint">
+        Загрузите 1 PDF (до 20 страниц) <b>или</b> до 20 фото. Общий размер ≤ 30 MB.
+      </small>
+      <div id="fileInfo" class="fileBadges hidden"></div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="row">
+      <button id="btnQueued" class="btn secondary full" data-i18n="docs.btnQueued">Проверить (через 24 ч)</button>
+      <button id="btnNow" class="btn full" data-i18n="docs.btnNow">Ускорить (сейчас)</button>
+    </div>
+    <small class="muted" data-i18n="docs.payNote">
+      «Проверить» запустит анализ через 23 ч 50 мин. «Ускорить» — сразу. Оплату подключим позже.
+    </small>
+    <div id="status" class="status" style="margin-top:10px">
+      <span class="dot grey"></span><span class="muted" data-i18n="docs.statusIdle">Статус: ожидание</span>
+    </div>
+    <div class="progress hidden" id="progress" style="margin-top:8px">
+      <span id="progressBar" style="width:0%"></span>
+    </div>
+  </div>
+
+  <div id="queuedBlock" class="card hidden">
+    <div class="h2" data-i18n="docs.jobInfo">Задача поставлена в очередь</div>
+    <div class="fileBadges" id="jobMeta"></div>
+    <div class="row">
+      <button id="btnCheckStatus" class="btn secondary full" data-i18n="docs.btnCheckStatus">Проверить статус</button>
+    </div>
+    <small class="muted" data-i18n="docs.jobHint">Сохраните Job ID — по нему можно получить результат.</small>
+  </div>
+
+  <div id="resultBlock" class="card hidden">
+    <div class="h2" data-i18n="docs.result">Результат</div>
+    <div id="verdict" class="p"></div>
+    <hr/>
+    <div id="fixes" class="p"></div>
+    <details id="fieldsDetails" style="margin-top:8px">
+      <summary data-i18n="docs.fields">Извлечённые поля</summary>
+      <div id="fields" class="mono"></div>
+    </details>
+    <details id="rawDetails" class="hidden" style="margin-top:8px">
+      <summary data-i18n="docs.raw">Сырой ответ</summary>
+      <div id="raw" class="mono"></div>
+    </details>
+  </div>
+
+  <div class="footer">
+    <div class="tabs">
+      <a class="tab" href="translator.html" data-i18n="tabs.translator">Переводчик</a>
+      <a class="tab" href="module-docs.html" data-i18n="tabs.docs">Документы</a>
+      <a class="tab" href="consultant.html" data-i18n="tabs.consultant">Консультант</a>
+    </div>
+  </div>
+
+</div>
+
+<script>
+(function(){
+  const $ = s => document.querySelector(s);
+  const $$ = s => Array.from(document.querySelectorAll(s));
+
+  // === i18n ===
+  const PAGE_I18N = {
+    ru: {
+      "docs.title":"Проверка документов",
+      "docs.docType":"Тип документа",
+      "docs.hintType":"Выберите документ, который будете проверять.",
+      "docs.upload":"Загрузка",
+      "docs.uploadHint":"Загрузите 1 PDF (до 20 страниц) или до 20 фото. Общий размер ≤ 30 MB.",
+      "docs.btnQueued":"Проверить (через 24 ч)",
+      "docs.btnNow":"Ускорить (сейчас)",
+      "docs.payNote":"«Проверить» запустит анализ через 23 ч 50 мин. «Ускорить» — сразу. Оплату подключим позже.",
+      "docs.statusIdle":"Статус: ожидание",
+      "docs.jobInfo":"Задача поставлена в очередь",
+      "docs.jobHint":"Сохраните Job ID — по нему можно получить результат.",
+      "docs.btnCheckStatus":"Проверить статус",
+      "docs.result":"Результат",
+      "docs.fields":"Извлечённые поля",
+      "docs.raw":"Сырой ответ",
+      "tabs.translator":"Переводчик",
+      "tabs.docs":"Документы",
+      "tabs.consultant":"Консультант"
+    },
+    ua: {
+      "docs.title":"Перевірка документів",
+      "docs.docType":"Тип документа",
+      "docs.hintType":"Оберіть документ для перевірки.",
+      "docs.upload":"Завантаження",
+      "docs.uploadHint":"Завантажте 1 PDF (до 20 сторінок) або до 20 фото. Загальний розмір ≤ 30 MB.",
+      "docs.btnQueued":"Перевірити (через 24 год)",
+      "docs.btnNow":"Прискорити (зараз)",
+      "docs.payNote":"«Перевірити» запустить аналіз через 23 год 50 хв. «Прискорити» — одразу. Оплату додамо пізніше.",
+      "docs.statusIdle":"Статус: очікування",
+      "docs.jobInfo":"Завдання поставлено в чергу",
+      "docs.jobHint":"Збережіть Job ID — за ним можна отримати результат.",
+      "docs.btnCheckStatus":"Перевірити статус",
+      "docs.result":"Результат",
+      "docs.fields":"Витягнуті поля",
+      "docs.raw":"Сирий відгук",
+      "tabs.translator":"Перекладач",
+      "tabs.docs":"Документи",
+      "tabs.consultant":"Кансультант"
+    },
+    by: {
+      "docs.title":"Праверка дакументаў",
+      "docs.docType":"Тып дакумента",
+      "docs.hintType":"Абярыце дакумент для праверкі.",
+      "docs.upload":"Загрузка",
+      "docs.uploadHint":"Загрузіце 1 PDF (да 20 старонак) або да 20 фота. Агульны памер ≤ 30 MB.",
+      "docs.btnQueued":"Праверыць (праз 24 гадз)",
+      "docs.btnNow":"Паскорыць (зараз)",
+      "docs.payNote":"«Праверыць» запусціць аналіз праз 23 г 50 хв. «Паскорыць» — адразу. Аплату дадамо пазней.",
+      "docs.statusIdle":"Статус: чаканне",
+      "docs.jobInfo":"Заданне пастаўлена ў чаргу",
+      "docs.jobHint":"Захавайце Job ID — па ім можна атрымаць вынік.",
+      "docs.btnCheckStatus":"Праверыць статус",
+      "docs.result":"Вынік",
+      "docs.fields":"Вылучаныя палі",
+      "docs.raw":"Сыры адказ",
+      "tabs.translator":"Перакладчык",
+      "tabs.docs":"Дакументы",
+      "tabs.consultant":"Кансультант"
+    }
+  };
+  const i18nState = { dict: {} };
+
+  function getLang(){ return localStorage.getItem('lang') || 'ru'; }
+  async function loadBaseDict(){
+    const lang = getLang();
+    try {
+      const res = await fetch(`/i18n/${lang}.json`, { cache: 'no-store' });
+      if(res.ok){ i18nState.dict = await res.json(); }
+    } catch(e){ i18nState.dict = {}; }
+    Object.assign(i18nState.dict, PAGE_I18N[lang] || {});
+    setLangButtons(lang);
+    repaint();
+  }
+  function t(key){ return i18nState.dict[key] || key; }
+  function repaint(){ $("[data-i18n='docs.title']").innerHTML = t("docs.title"); $$(".card [data-i18n]").forEach(el=>{ const k=el.getAttribute('data-i18n'); if(k) el.innerHTML = t(k); }); $$(".tabs .tab").forEach(el=>{ const k=el.getAttribute('data-i18n'); if(k) el.innerHTML = t(k); }); }
+  function setLangButtons(lang){
+    $$("#langSwitcher button").forEach(b=>{ b.classList.toggle("active", b.dataset.lang===lang); });
+  }
+  $("#langSwitcher").addEventListener("click", (e)=>{
+    const btn = e.target.closest("button[data-lang]"); if(!btn) return;
+    const lang = btn.dataset.lang;
+    localStorage.setItem('lang', lang);
+    loadBaseDict();
+  });
+
+  // === Upload UI ===
+  const fileInput = $("#file");
+  const fileInfo = $("#fileInfo");
+  fileInput.addEventListener("change", ()=>{
+    const files = Array.from(fileInput.files||[]);
+    fileInfo.innerHTML = "";
+    if(!files.length){ fileInfo.classList.add("hidden"); return; }
+    const total = files.reduce((a,f)=>a+(f.size||0),0);
+    const pdfCount = files.filter(f=>f.type==="application/pdf").length;
+    const imgCount = files.filter(f=>f.type.startsWith("image/")).length;
+    const mk = (label,val)=>`<span class="badge">${label}: <b>${val}</b></span>`;
+    fileInfo.innerHTML = mk("Файлов", files.length) + mk("Размер", bytesHuman(total)) + mk("PDF", pdfCount) + mk("Фото", imgCount);
+    fileInfo.classList.remove("hidden");
+  });
+  function bytesHuman(n){ if(n<1024) return n+" B"; if(n<1024*1024) return (n/1024).toFixed(1)+" KB"; return (n/1024/1024).toFixed(1)+" MB"; }
+
+  // === Actions ===
+  const statusEl = $("#status");
+  const progress = $("#progress");
+  const progressBar = $("#progressBar");
+
+  function setStatus(color, text){
+    const dot = statusEl.querySelector(".dot"); dot.className = "dot "+color;
+    statusEl.lastElementChild.textContent = text;
+  }
+  function setProgress(pct){
+    progress.classList.remove("hidden");
+    progressBar.style.width = Math.max(0,Math.min(100,pct))+"%";
+  }
+
+  async function send(mode){
+    const files = Array.from(fileInput.files||[]);
+    const docType = $("#docType").value;
+    if(!files.length){ alert("Добавьте файл(ы)"); return; }
+    const total = files.reduce((a,f)=>a+(f.size||0),0);
+    if(total > 30*1024*1024){ alert("Суммарный размер файлов превышает 30 MB"); return; }
+    const pdfs = files.filter(f=>f.type==="application/pdf");
+    const imgs = files.filter(f=>f.type.startsWith("image/"));
+    if(pdfs.length && imgs.length){ alert("Загрузите или PDF, или изображения — не одновременно"); return; }
+    if(pdfs.length>1){ alert("Только один PDF"); return; }
+
+    setStatus("amber","Отправляем…"); setProgress(20);
+    const fd = new FormData();
+    fd.set("docType", docType);
+    fd.set("mode", mode);
+    files.forEach((f,i)=>fd.append("file", f, f.name||("file_"+i)));
+
+    const res = await fetch("/api/verify-document", { method:"POST", body: fd });
+    const data = await res.json().catch(()=> ({}));
+
+    if(!res.ok){ setStatus("red", data.error||"Ошибка отправки"); progress.classList.add("hidden"); return; }
+
+    if(mode==="queued"){
+      setStatus("green","Поставлено в очередь"); progress.classList.add("hidden");
+      $("#queuedBlock").classList.remove("hidden");
+      $("#jobMeta").innerHTML =
+        `<span class="badge"><b>Job ID</b>: <span class="mono">${data.jobId}</span></span>
+         <span class="badge"><b>Run at</b>: <span class="mono">${data.runAt}</span></span>`;
+      localStorage.setItem("lastJobId", data.jobId);
+    } else {
+      setStatus("green","Готово"); setProgress(100);
+      showResult(data.result || data);
+    }
+  }
+
+  function showResult(res){
+    $("#resultBlock").classList.remove("hidden");
+    const v = res.verdict?.status || "uncertain";
+    const sum = res.verdict?.summary || "";
+    $("#verdict").innerHTML = `<b>Вердикт:</b> ${v.toUpperCase()} ${sum ? "— "+sum : ""}`;
+    const fails = (res.checks||[]).filter(c=>!c.passed);
+    $("#fixes").innerHTML = `<b>Что исправить:</b><br>` + (fails.length ? fails.map(c=>`• ${c.title}: ${c.fixTip||"исправьте по указанию"}`).join("<br>") : "Ошибок не найдено");
+    $("#fields").textContent = JSON.stringify(res.fieldsExtracted||{}, null, 2);
+    $("#rawDetails").classList.add("hidden"); $("#raw").textContent = "";
+  }
+
+  $("#btnQueued").addEventListener("click", ()=>send("queued"));
+  $("#btnNow").addEventListener("click", ()=>send("now"));
+
+  $("#btnCheckStatus").addEventListener("click", async ()=>{
+    const id = localStorage.getItem("lastJobId") || prompt("Введите Job ID:");
+    if(!id) return;
+    setStatus("amber","Проверяем статус…");
+    const r = await fetch(`/api/job-status?jobId=${encodeURIComponent(id)}`);
+    const data = await r.json().catch(()=> ({}));
+    if(!r.ok){ setStatus("red", data.error||"Ошибка статуса"); return; }
+    if(data.status==="done" && data.result){ setStatus("green","Готово"); showResult(data.result); }
+    else if(data.status==="processing"){ setStatus("amber","Обрабатываем…"); }
+    else if(data.status==="queued"){ setStatus("grey","В очереди…"); }
+    else { setStatus("red","Неизвестный статус"); }
+  });
+
+  // init
+  function repaint(){ /* заполнено в loadBaseDict */ }
+  loadBaseDict();
+  document.addEventListener("pageshow", ()=>loadBaseDict());
+})();
+</script>
+</body>
+</html>
