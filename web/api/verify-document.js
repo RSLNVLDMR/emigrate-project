@@ -1,6 +1,6 @@
 import { promises as fsp } from 'fs';
 import path from 'path';
-import { fileURLToPath } from 'url';
+import { fileURLToPath, pathToFileURL } from 'url';
 import formidable from 'formidable';
 import OpenAI from 'openai';
 import sharp from 'sharp';
@@ -26,15 +26,14 @@ function envApiKey() {
 }
 const openai = new OpenAI({ apiKey: envApiKey() });
 
-// ── pdfjs worker под Node (через require.resolve)
-pdfjsLib.GlobalWorkerOptions.workerSrc = require.resolve(
-  'pdfjs-dist/legacy/build/pdf.worker.mjs'
-);
+// ── pdfjs worker под Node (file:// URL через pathToFileURL + require.resolve)
+pdfjsLib.GlobalWorkerOptions.workerSrc = pathToFileURL(
+  require.resolve('pdfjs-dist/legacy/build/pdf.worker.mjs')
+).href;
 
 function toU8(buf){ return buf instanceof Uint8Array ? buf : new Uint8Array(buf); }
 
 async function parseForm(req){
-  // formidable стримит во временные файлы — подходит для крупных аплоадов
   const form = formidable({ multiples: true, maxFileSize: 35*1024*1024 });
   return new Promise((resolve,reject)=>{
     form.parse(req, (err, fields, files)=>{
@@ -50,12 +49,8 @@ async function parseForm(req){
 }
 
 function sumSize(files){ return files.reduce((a,f)=>a+(f.size||0),0); }
-
-async function readTmp(fp){
-  const buf = await fsp.readFile(fp);
-  fsp.unlink(fp).catch(()=>{});
-  return buf;
-}
+async function readTmp(fp){ const b = await fsp.readFile(fp); fsp.unlink(fp).catch(()=>{}); return b; }
+function extOf(name='file'){ return (name.split('.').pop()||'').toLowerCase(); }
 
 async function pdfExtractText(u8){
   const doc = await pdfjsLib.getDocument({ data: toU8(u8) }).promise;
@@ -116,7 +111,6 @@ function estimateOcrQuality(text){
 }
 
 async function loadRules(){
-  // читаем соседние файлы правил (они попадут в бандл)
   const basePrompt = await fsp.readFile(path.join(root, 'rules', 'prompt.base.txt'), 'utf8');
   const schema = JSON.parse(await fsp.readFile(path.join(root, 'rules', 'schema.verify.json'), 'utf8'));
   const rules = JSON.parse(await fsp.readFile(path.join(root, 'rules', 'doc_rules.json'), 'utf8'));
@@ -216,7 +210,8 @@ export default async function handler(req, res){
   try{
     if(!envApiKey()) return bad(res, 500, 'OPENAI_API_KEY not set');
 
-    const { fields, files } = await parseForm(req);
+    const form = await parseForm(req);
+    const { fields, files } = form;
     const docType = String(fields.docType||'').trim() || 'unknown';
     const citizenship = String(fields.citizenship||'').trim() || '';
     const pathName = String(fields.path||'').trim() || '';
