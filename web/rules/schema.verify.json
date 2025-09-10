@@ -1,0 +1,21 @@
+{
+  "docType": "string",
+  "language": "string",
+  "ocrQuality": "good|medium|poor",
+  "fieldsExtracted": {},
+  "checks": [
+    {
+      "id": "string",
+      "title": "string",
+      "passed": true,
+      "severity": "low|medium|high",
+      "evidence": "string",
+      "fixTip": "string"
+    }
+  ],
+  "verdict": {
+    "status": "pass|fail|uncertain",
+    "summary": "string"
+  },
+  "advice": ["string"]
+}
