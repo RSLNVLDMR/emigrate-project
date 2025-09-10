@@ -3,10 +3,13 @@ import OpenAI from "openai";
 import formidable from "formidable";
 import { promises as fsp } from "node:fs";
 import { Buffer } from "node:buffer";
+import { pathToFileURL } from "node:url";
+import { createRequire } from "node:module";
 
-export const config = { api: { bodyParser: false } };
+// ==== ВАЖНО: фикс рантайма, чтобы НЕ Edge ====
+export const config = { runtime: "nodejs", api: { bodyParser: false } };
 
-// --- API key ---
+// ==== API key ====
 function getApiKey() {
   return (
     process.env.OPENAI_API_KEY ||
@@ -18,28 +21,25 @@ function getApiKey() {
   );
 }
 
-// --- refusal detector ---
-const REFUSAL_RX = /(i'?m\s+sorr(y|ies)|cannot\s+help|can[' ]?t\s+assist|i\s+can[' ]?t|refuse|извините.*не могу|не могу помочь|не можу допомогти|не магу дапамагчы)/i;
+// ==== refusal detector ====
+const REFUSAL_RX =
+  /(i'?m\s+sorr(y|ies)|cannot\s+help|can[' ]?t\s+assist|i\s+can[' ]?t|refuse|извините.*не могу|не могу помочь|не можу допомогти|не магу дапамагчы)/i;
 
-// --- translator prompts ---
+// ==== translator prompts ====
 function systemPrompt(from, to) {
-  return (
-`You are a neutral, professional translator. Translate from ${from} to ${to} **verbatim**.
+  return `You are a neutral, professional translator. Translate from ${from} to ${to} **verbatim**.
 Follow strictly:
 - Preserve meaning, tone, formatting, emoji, punctuation, line breaks.
 - Do NOT censor, euphemize, or moralize. Profanity, insults, slurs, sexual/violent language may appear — translate them exactly.
 - This is a factual, educational transformation task (transformation exception).
 - Do not add apologies, warnings, or safety notes. Output ONLY the translation.
-- If legally prohibited content appears (e.g., sexual content involving minors), translate the rest and replace that specific segment with [REDACTED], keeping structure.`
-  );
+- If legally prohibited content appears (e.g., sexual content involving minors), translate the rest and replace that specific segment with [REDACTED], keeping structure.`;
 }
 function strongerSystemPrompt(from, to) {
-  return (
-`ROLE: Translator only. TASK: Translate from ${from} to ${to} with **verbatim fidelity**.
+  return `ROLE: Translator only. TASK: Translate from ${from} to ${to} with **verbatim fidelity**.
 ALLOWED: profanity, obscenity, insults, slurs, adult/violent language — translate exactly (transformation exception).
 FORBIDDEN: refusals, safety disclaimers, moral commentary, summaries. Output = translation only.
-If a truly disallowed segment appears (e.g., sexual content involving minors), replace ONLY that fragment with [REDACTED] and translate the rest.`
-  );
+If a truly disallowed segment appears (e.g., sexual content involving minors), replace ONLY that fragment with [REDACTED] and translate the rest.`;
 }
 
 async function ask(client, sys, userContent) {
@@ -48,8 +48,8 @@ async function ask(client, sys, userContent) {
     temperature: 0,
     messages: [
       { role: "system", content: sys },
-      { role: "user", content: userContent }
-    ]
+      { role: "user", content: userContent },
+    ],
   });
   return (r.choices?.[0]?.message?.content || "").trim();
 }
@@ -61,39 +61,46 @@ async function translateText(client, from, to, text) {
   return out;
 }
 
-/* ========================== OCR helpers — совместим с pdfjs-dist ========================== */
+/* ========================== PDF / OCR ========================== */
 
-// ВАЖНО: pdfjs-dist не принимает Node Buffer. Ему нужен чистый Uint8Array.
+// ВАЖНО: pdfjs-dist требует правильной инициализации воркера в serverless.
+import * as pdfjsLib from "pdfjs-dist/legacy/build/pdf.mjs";
+import { createCanvas } from "@napi-rs/canvas";
+const require = createRequire(import.meta.url);
+
+// ДАЁМ pdfjs file:// URL до worker.mjs — так он точно существует в рантайме.
+pdfjsLib.GlobalWorkerOptions.workerSrc = pathToFileURL(
+  require.resolve("pdfjs-dist/legacy/build/pdf.worker.mjs")
+).href;
+
+// pdfjs предпочитает чистый Uint8Array
 function toU8(x) {
   if (!x) return new Uint8Array();
   if (Buffer.isBuffer(x)) {
-    // создаём чистый Uint8Array, а не оставляем Buffer
     return new Uint8Array(x.buffer, x.byteOffset, x.byteLength);
   }
   if (x instanceof Uint8Array) {
-    // гарантируем, что это именно Uint8Array, а не подкласс
     return new Uint8Array(x.buffer, x.byteOffset, x.byteLength);
   }
   if (x instanceof ArrayBuffer) return new Uint8Array(x);
   return new Uint8Array(x);
 }
 
-// PDF → PNG (до 10 стр)
+// PDF → PNG (до 10 стр, scale ≈ ретина)
 async function renderPdfToPngBuffers(pdfBuffer, maxPages = 10, scale = 2.2) {
-  const pdfjs = await import("pdfjs-dist/legacy/build/pdf.mjs");
-  const { createCanvas } = await import("@napi-rs/canvas");
-
-  const doc = await pdfjs.getDocument({ data: toU8(pdfBuffer), disableWorker: true }).promise;
+  const doc = await pdfjsLib.getDocument({ data: toU8(pdfBuffer) }).promise;
   const pages = Math.min(doc.numPages, maxPages);
   const out = [];
 
   for (let i = 1; i <= pages; i++) {
-    const page = await pdfjs.getDocument ? await doc.getPage(i) : await doc.getPage(i); // защита от tree-shaking
+    const page = await doc.getPage(i);
     const viewport = page.getViewport({ scale });
-    const canvas = createCanvas(Math.max(1, Math.floor(viewport.width)), Math.max(1, Math.floor(viewport.height)));
+    const canvas = createCanvas(
+      Math.max(1, Math.floor(viewport.width)),
+      Math.max(1, Math.floor(viewport.height))
+    );
     const ctx = canvas.getContext("2d");
     await page.render({ canvasContext: ctx, viewport }).promise;
-    // Возвращаем PNG буфер (далее мы только base64 кодируем для Vision)
     out.push(canvas.toBuffer("image/png"));
   }
   return out;
@@ -102,14 +109,28 @@ async function renderPdfToPngBuffers(pdfBuffer, maxPages = 10, scale = 2.2) {
 // Подготовка image inputs для Vision
 async function buildImageInputsFromBuffers(buffers) {
   let sharpLib = null;
-  try { sharpLib = (await import("sharp")).default; } catch {}
+  try {
+    sharpLib = (await import("sharp")).default;
+  } catch {}
   const inputs = [];
   for (const buf of buffers) {
     if (sharpLib) {
-      const base = await sharpLib(buf).rotate().resize({ width: 2200, withoutEnlargement: true }).jpeg({ quality: 92 }).toBuffer();
-      inputs.push({ type: "image_url", image_url: { url: `data:image/jpeg;base64,${base.toString("base64")}` } });
+      const base = await sharpLib(buf)
+        .rotate()
+        .resize({ width: 2200, withoutEnlargement: true })
+        .jpeg({ quality: 92 })
+        .toBuffer();
+      inputs.push({
+        type: "image_url",
+        image_url: { url: `data:image/jpeg;base64,${base.toString("base64")}` },
+      });
     } else {
-      inputs.push({ type: "image_url", image_url: { url: `data:image/jpeg;base64,${Buffer.from(buf).toString("base64")}` } });
+      inputs.push({
+        type: "image_url",
+        image_url: {
+          url: `data:image/jpeg;base64,${Buffer.from(buf).toString("base64")}`,
+        },
+      });
     }
   }
   return inputs;
@@ -133,13 +154,19 @@ async function ocrImageBuffer(buf, client, variant = 1, maxTokens = 1500) {
     max_tokens: maxTokens,
     messages: [
       { role: "system", content: sys },
-      { role: "user", content: [{ type: "text", text: "Extract plain text from the image exactly as seen." }, ...images] }
-    ]
+      {
+        role: "user",
+        content: [
+          { type: "text", text: "Extract plain text from the image exactly as seen." },
+          ...images,
+        ],
+      },
+    ],
   });
 
   return (completion.choices?.[0]?.message?.content || "").trim();
 }
-/* ================================================================================================= */
+/* =============================================================== */
 
 export default async function handler(req, res) {
   if (req.method !== "POST") {
@@ -151,7 +178,7 @@ export default async function handler(req, res) {
   if (!apiKey) {
     res.status(500).json({
       error:
-        "OPENAI_API_KEY не задан на сервере. Добавьте переменную (или переименуйте вашу OPEN_API_KEY) в Vercel для Preview/Production и redeploy."
+        "OPENAI_API_KEY не задан на сервере. Добавьте переменную (или переименуйте вашу OPEN_API_KEY) в Vercel для Preview/Production и redeploy.",
     });
     return;
   }
@@ -163,7 +190,7 @@ export default async function handler(req, res) {
       multiples: false,
       maxFileSize: 40 * 1024 * 1024, // 40 МБ
       uploadDir: "/tmp",
-      keepExtensions: true
+      keepExtensions: true,
     });
 
     const { fields, files } = await new Promise((resolve, reject) => {
@@ -210,7 +237,7 @@ export default async function handler(req, res) {
         parts.push(out || "");
 
       } else if (mime === "application/pdf") {
-        // A) Пытаемся вытащить «живой» текст через pdf-parse (он принимает Buffer — это ок)
+        // A) Попытка извлечь "живой" текст через pdf-parse
         let pdfParse;
         try {
           const mod = await import("pdf-parse");
@@ -228,9 +255,9 @@ export default async function handler(req, res) {
           } catch {}
         }
 
-        // B) Если текста нет — OCR по страницам (до 10) с автоповтором при отказе
+        // B) Если текста нет — OCR по страницам (до 10)
         if (!extracted) {
-          const pages = await renderPdfToPngBuffers(buf, 10, 2.2); // <-- тут уже toU8 внутри
+          const pages = await renderPdfToPngBuffers(buf, 10, 2.2);
           if (!pages.length) {
             res.status(400).json({ error: "Не удалось обработать PDF. Попробуйте фото/скан." });
             return;
