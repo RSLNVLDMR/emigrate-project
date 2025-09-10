@@ -1,0 +1,195 @@
+{
+  "wniosek": {
+    "fields": ["fullName", "address", "applicationBasis", "voivode", "signatures", "date"],
+    "checks": [
+      {"id":"complete_required","title":"Все обязательные поля заполнены","severity":"high"},
+      {"id":"polish_language","title":"Анкета на польском, печатными буквами","severity":"medium"},
+      {"id":"signature_present","title":"Есть собственноручная подпись заявителя в нужном месте","severity":"high"},
+      {"id":"correct_voivode","title":"Адресат — корректный воевода по месту проживания","severity":"medium"},
+      {"id":"personal_data_match","title":"Данные совпадают с паспортом","severity":"high"}
+    ]
+  },
+  "paszport": {
+    "fields": ["fullName", "dateOfBirth", "passportNumber", "issueDate", "expiryDate", "nationality"],
+    "checks": [
+      {"id":"validity_3m_after","title":"Срок действия ≥ 3 мес. после планируемого окончания пребывания","severity":"high"},
+      {"id":"issued_last_10y","title":"Паспорт выдан ≤ 10 лет назад","severity":"medium"},
+      {"id":"all_marked_pages","title":"Предоставлены все страницы со штампами/визами","severity":"medium"},
+      {"id":"matches_application","title":"Совпадение ФИО/даты рождения с анкетой","severity":"high"}
+    ]
+  },
+  "photo_biometric": {
+    "fields": ["date", "headPosition", "bgColor", "glasses", "headwear", "imageQuality"],
+    "checks": [
+      {"id":"recent_6m","title":"Фото не старше 6 месяцев","severity":"medium"},
+      {"id":"size_bg_face","title":"Размер/фон/доля лица соответствуют биометрическим нормам","severity":"high"},
+      {"id":"no_obstructions","title":"Нет теней/бликов/посторонних предметов","severity":"medium"},
+      {"id":"glasses_rules","title":"Очки (если есть) без бликов, прозрачные","severity":"low"}
+    ]
+  },
+  "oplata_skarbowa": {
+    "fields": ["amount", "recipientOffice", "accountNumber", "title", "payerName", "date"],
+    "checks": [
+      {"id":"correct_amount","title":"Сумма соответствует цели заявления","severity":"high"},
+      {"id":"correct_recipient","title":"Получатель — правильный Urząd Miasta/województwo","severity":"high"},
+      {"id":"title_contains_name","title":"В назначении есть ФИО заявителя и цель платежа","severity":"high"}
+    ]
+  },
+  "najmu_standard": {
+    "fields": ["tenantName","landlordName","address","periodFrom","periodTo","rentAmount","signatures"],
+    "checks": [
+      {"id":"address_complete","title":"Полный адрес (улица/дом/кв/индекс/город)","severity":"high"},
+      {"id":"period_covers","title":"Срок охватывает период рассмотрения/пребывания","severity":"high"},
+      {"id":"both_signatures","title":"Подписи обеих сторон","severity":"high"},
+      {"id":"language_pl","title":"Документ на польском или с присяжным переводом","severity":"medium"}
+    ]
+  },
+  "najmu_okazjonalny": {
+    "fields": ["tenantName","landlordName","address","periodFrom","periodTo","rentAmount","signatures","notaryRef"],
+    "checks": [
+      {"id":"okazjonalny_attachments","title":"Доп. элементы okazjonalny (нотариальные/оświadczenia) указаны/приложены","severity":"high"},
+      {"id":"address_complete","title":"Полный адрес","severity":"high"},
+      {"id":"both_signatures","title":"Подписи обеих сторон","severity":"high"}
+    ]
+  },
+  "uzyczenie": {
+    "fields": ["giverName","receiverName","address","periodFrom","periodTo","signatures"],
+    "checks": [
+      {"id":"address_complete","title":"Полный адрес","severity":"high"},
+      {"id":"period_covers","title":"Срок достаточен для пребывания","severity":"medium"},
+      {"id":"signatures","title":"Подписи сторон","severity":"high"}
+    ]
+  },
+  "zameldowanie": {
+    "fields": ["fullName","address","validFrom","validTo","issuer","stampOrQR"],
+    "checks": [
+      {"id":"address_readable","title":"Адрес читаем и полный","severity":"high"},
+      {"id":"dates_present","title":"Указаны даты регистрации","severity":"medium"},
+      {"id":"authority","title":"Есть орган/печать/QR","severity":"medium"}
+    ]
+  },
+  "akt_wlasnosci": {
+    "fields": ["ownerName","address","notary","date"],
+    "checks": [
+      {"id":"owner_address_link","title":"Связь владельца и адреса прослеживается","severity":"high"}
+    ]
+  },
+  "oswiadczenie_wlasciciela": {
+    "fields": ["ownerName","applicantName","address","period","signature","proofOfOwnership"],
+    "checks": [
+      {"id":"all_fields","title":"Есть данные владельца/заявителя/полный адрес/период/подпись","severity":"high"},
+      {"id":"ownership_proof","title":"Приложено подтверждение права собственности (напр. KW)","severity":"medium"}
+    ]
+  },
+  "hotel_dorm": {
+    "fields": ["guestName","address","periodFrom","periodTo","stampOrInvoice"],
+    "checks": [
+      {"id":"name_address_dates","title":"Имя/адрес/даты проживания присутствуют","severity":"high"}
+    ]
+  },
+  "umowa_o_prace": {
+    "fields": ["employerName","employerNIP","employeeName","position","gross","startDate","endDate","signatures"],
+    "checks": [
+      {"id":"employer_ident","title":"Идентификаторы работодателя (NIP/адрес)","severity":"medium"},
+      {"id":"salary_enough","title":"Оклад ≥ минимального нетто (эвристика)","severity":"high"},
+      {"id":"signatures","title":"Подписи сторон","severity":"high"}
+    ]
+  },
+  "umowa_zlecenie": {
+    "fields": ["employerName","employeeName","rate","hoursOrScope","period","signatures"],
+    "checks": [
+      {"id":"rate_scope","title":"Ставка/объём/срок указаны","severity":"medium"},
+      {"id":"income_stability","title":"Доход и стабильность достаточны (эвристика)","severity":"medium"}
+    ]
+  },
+  "zezwolenie_typ_A": {
+    "fields": ["voivode","employerName","position","issueDate","validTo","number"],
+    "checks": [
+      {"id":"validity","title":"Разрешение действует на период работы","severity":"high"},
+      {"id":"matches_contract","title":"Соответствует договору по позиции/работодателю","severity":"high"}
+    ]
+  },
+  "informacja_starosty": {
+    "fields": ["county","issueDate","validTo"],
+    "checks": [
+      {"id":"valid_window","title":"В пределах срока действия (напр. 90–180 дней)","severity":"medium"}
+    ]
+  },
+  "zalacznik_nr_1": {
+    "fields": ["employerRep","signature","salary","hours","workplace"],
+    "checks": [
+      {"id":"signed_by_authorized","title":"Подписан уполномоченным лицом (KRS/CEIDG)","severity":"high"},
+      {"id":"consistency_with_contract","title":"Согласован с договором по зарплате/условиям","severity":"high"}
+    ]
+  },
+  "zaswiadczenie_uczelnia": {
+    "fields": ["studentName","university","program","studyForm","issueDate","validTo","stamp"],
+    "checks": [
+      {"id":"freshness","title":"Справка свежая (≤ 30–60 дней)","severity":"medium"},
+      {"id":"covers_period","title":"Охватывает период учёбы","severity":"medium"}
+    ]
+  },
+  "ubezpieczenie_zus": {
+    "fields": ["insuredName","docType","periodFrom","periodTo","employer","stamp"],
+    "checks": [
+      {"id":"insured_present","title":"Заявитель указан как застрахованный","severity":"high"},
+      {"id":"freshness","title":"Документ свежий (≤ 1–3 месяцев)","severity":"medium"}
+    ]
+  },
+  "ubezpieczenie_prywatne": {
+    "fields": ["provider","coverageFrom","coverageTo","territory","paymentProof"],
+    "checks": [
+      {"id":"covers_treatment","title":"Покрывает лечение в Польше (koszty leczenia)","severity":"high"},
+      {"id":"long_enough","title":"Срок покрытия достаточен (на период решения)","severity":"high"},
+      {"id":"payment_proof","title":"Есть подтверждение оплаты","severity":"medium"}
+    ]
+  },
+  "ubezpieczenie_nfz": {
+    "fields": ["contractNumber","coverageFrom","coverageTo","paymentsProof"],
+    "checks": [
+      {"id":"contract_present","title":"Договор с NFZ присутствует","severity":"high"},
+      {"id":"payments_recent","title":"Недавние оплаты взносов","severity":"medium"}
+    ]
+  },
+  "wyciag_bankowy": {
+    "fields": ["ownerName","bank","issueDate","balance","inflows"],
+    "checks": [
+      {"id":"fresh_30d","title":"Выписка не старше 30 дней","severity":"high"},
+      {"id":"owner_match","title":"Владелец совпадает с заявителем","severity":"high"},
+      {"id":"regular_inflows","title":"Регулярные поступления, не единичный крупный депозит","severity":"medium"}
+    ]
+  },
+  "pit_11": {
+    "fields": ["year","payer","amounts","stamp"],
+    "checks": [
+      {"id":"year_ok","title":"Корректный год и суммы","severity":"medium"}
+    ]
+  },
+  "pit_37": {
+    "fields": ["year","amounts","stamp"],
+    "checks": [
+      {"id":"year_ok","title":"Корректный год и суммы","severity":"medium"}
+    ]
+  },
+  "pesel_ukr": {
+    "fields": ["pesel","ukrFlag","fullName","issueDate"],
+    "checks": [
+      {"id":"has_ukr_flag","title":"Есть пометка UKR","severity":"high"},
+      {"id":"pesel_11_digits","title":"PESEL состоит из 11 цифр","severity":"high"}
+    ]
+  },
+  "diia_pl": {
+    "fields": ["holder","validity","qr"],
+    "checks": [
+      {"id":"present","title":"Документ присутствует и читаем","severity":"medium"}
+    ]
+  },
+  "wiza_D21": {
+    "fields": ["type","code","validFrom","validTo","holder"],
+    "checks": [
+      {"id":"type_D","title":"TYPE OF VISA = D","severity":"high"},
+      {"id":"code_21","title":"UWAGI содержит код 21","severity":"high"},
+      {"id":"valid_now","title":"Виза действительна на момент подачи","severity":"high"}
+    ]
+  }
+}
