@@ -24,6 +24,8 @@
       <div class="p" data-i18n="supplement1_description_text">
         Дополнение №1 к заявлению на карту побыту для лиц, работающих по трудовому договору. 
         Данный документ необходимо заполнить и приложить к основному заявлению при подаче документов на карту побыту по работе.
+        <br><br>
+        <strong>Важно:</strong> Это дополнение заполняет работодатель, но мы советуем самостоятельно заполнить документ и дать начальнику или отделу кадров документ к подписи.
       </div>
     </div>
 
@@ -46,10 +48,23 @@
       <ul class="list">
         <li data-i18n="supplement1_instruction_1">Заполните все обязательные поля</li>
         <li data-i18n="supplement1_instruction_2">Укажите точные данные о работодателе</li>
-        <li data-i18n="supplement1_instruction_3">Приложите копию трудового договора</li>
+        <li data-i18n="supplement1_instruction_3">Самостоятельно заполните документ и дайте начальнику или отделу кадров к подписи</li>
         <li data-i18n="supplement1_instruction_4">Проверьте правильность всех данных</li>
         <li data-i18n="supplement1_instruction_5">Подпишите документ</li>
       </ul>
+    </div>
+
+    <!-- Проверка документа с помощью AI -->
+    <div class="card">
+      <div class="h2" data-i18n="supplement1_ai_check">Проверка документа</div>
+      <div class="p" data-i18n="supplement1_ai_check_text">
+        Мы советуем проверить заполненный документ с помощью AI. Вы можете это сделать нажав кнопку снизу.
+      </div>
+      <div class="button-group">
+        <button class="btn btn-primary" onclick="checkDocumentWithAI()" data-i18n="supplement1_ai_check_button">
+          Проверить документ с помощью AI
+        </button>
+      </div>
     </div>
 
   </div>
@@ -108,6 +123,12 @@
         document.body.appendChild(link);
         link.click();
         document.body.removeChild(link);
+      };
+
+      // Функция проверки документа с помощью AI (заглушка)
+      window.checkDocumentWithAI = function() {
+        console.log('Проверка документа с помощью AI...');
+        alert('Функция проверки документа с помощью AI будет доступна в ближайшее время!');
       };
 
       // Функция поделиться дополнением №1
@@ -181,7 +202,8 @@
       // Проверяем, что функции определены
       console.log('Функции определены:', {
         downloadSupplement1: typeof window.downloadSupplement1,
-        shareSupplement1: typeof window.shareSupplement1
+        shareSupplement1: typeof window.shareSupplement1,
+        checkDocumentWithAI: typeof window.checkDocumentWithAI
       });
     })();
   </script>
