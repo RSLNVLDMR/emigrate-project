@@ -130,17 +130,37 @@ async function loadRules(){
   const basePrompt = await fsp.readFile(path.join(root, 'rules', 'prompt.base.txt'), 'utf8');
   const schema = JSON.parse(await fsp.readFile(path.join(root, 'rules', 'schema.verify.json'), 'utf8'));
   const rules = JSON.parse(await fsp.readFile(path.join(root, 'rules', 'doc_rules.json'), 'utf8'));
-  // <-- добавили чтение таблицы сборов
-  let fees = {};
-  try {
-    fees = JSON.parse(await fsp.readFile(path.join(root, 'rules', 'context', 'fees.json'), 'utf8'));
-  } catch {
-    fees = {};
-  }
-  return { basePrompt, schema, rules, fees };
+  return { basePrompt, schema, rules };
 }
 
-function buildMessages({ basePrompt, schema, rulesForType, context, ocrText, mergedImageDataUrl, fees }) {
+// ---- date utils (deterministic) ----
+function parsePLDate(s){
+  if(!s || typeof s!=='string') return null;
+  const t = s.trim();
+  // ISO yyyy-mm-dd / yyyy.mm.dd / yyyy/mm/dd
+  let m = t.match(/^(\d{4})[.\-/](\d{2})[.\-/](\d{2})$/);
+  if(m){
+    const [_,Y,Mo,D] = m;
+    const d = new Date(Number(Y), Number(Mo)-1, Number(D));
+    return isNaN(d) ? null : d;
+  }
+  // dd.mm.yyyy / dd-mm-yyyy / dd/mm/yyyy  (евро-формат по умолчанию)
+  m = t.match(/^(\d{1,2})[.\-/](\d{1,2})[.\-/](\d{4})$/);
+  if(m){
+    const [_,D,Mo,Y] = m;
+    const d = new Date(Number(Y), Number(Mo)-1, Number(D));
+    return isNaN(d) ? null : d;
+  }
+  return null;
+}
+function daysBetween(a, b){
+  const MS = 24*60*60*1000;
+  const da = new Date(a.getFullYear(), a.getMonth(), a.getDate());
+  const db = new Date(b.getFullYear(), b.getMonth(), b.getDate());
+  return Math.floor((da - db)/MS);
+}
+
+function buildMessages({ basePrompt, schema, rulesForType, context, ocrText, mergedImageDataUrl }) {
   const sys = basePrompt;
   const extractionHint =
 `К ИЗВЛЕЧЕНИЮ (если есть в документе/сканах):
@@ -159,9 +179,7 @@ userName: ${context.userName||''}
 ${extractionHint}
 Return STRICT JSON per schema. If data insufficient: set passed=false with helpful fixTip. If language != PL: advise sworn translation.` },
     { type:'text', text: `SCHEMA:\n${JSON.stringify(schema)}` },
-    { type:'text', text: `CHECKLIST FOR TYPE:\n${JSON.stringify(rulesForType, null, 2)}` },
-    // <-- добавили таблицу сборов в промпт
-    { type:'text', text: `FEES_TABLE:\n${JSON.stringify(fees)}` }
+    { type:'text', text: `CHECKLIST FOR TYPE:\n${JSON.stringify(rulesForType, null, 2)}` }
   ];
   if(ocrText && ocrText.trim()){
     userParts.push({ type:'text', text:`OCR_TEXT (raw):\n${ocrText.slice(0,20000)}` });
@@ -187,6 +205,43 @@ async function callLLM({ messages }){
   if(s>=0 && e>s){ try{ json = JSON.parse(out.slice(s,e+1)); }catch{ json={ verdict:{status:'uncertain',summary:'parse error'}, raw: out}; } }
   else { json = { verdict:{status:'uncertain',summary:'no json'}, raw: out }; }
   return json;
+}
+
+// post-fix for oplata_skarbowa: compute payment_date_recent deterministically
+function enforcePaymentRecency(result, applicationDate){
+  try{
+    if(!result || (result.docType!=='oplata_skarbowa' && result.docType!=='opłata_skarbowa')) return;
+
+    const fields = result.fieldsExtracted || {};
+    const paymentStr = fields.payment_date || fields.paymentDate || '';
+    const appStr = applicationDate || '';
+    const payment = parsePLDate(paymentStr);
+    const ref = parsePLDate(appStr) || new Date(); // если дата подачи не передана — сегодня
+    const checks = Array.isArray(result.checks) ? result.checks : [];
+
+    // найдём существующий чек (или создадим)
+    let chk = checks.find(c => c && c.key === 'payment_date_recent');
+    if(!chk){
+      chk = { key: 'payment_date_recent', title: 'Платёж свежий', required: false };
+      checks.push(chk);
+      result.checks = checks;
+    }
+
+    if(!payment){
+      chk.passed = false;
+      chk.details = 'Не удалось разобрать дату платежа (ожидается DD.MM.YYYY или YYYY-MM-DD).';
+      return;
+    }
+
+    const diff = daysBetween(ref, payment); // ref - payment
+    const inFuture = diff < 0;
+    const within60 = diff <= 60;
+
+    chk.passed = !inFuture && within60;
+    chk.details = `payment_date=${paymentStr} ⇒ ${payment.toISOString().slice(0,10)}, reference=${ref.toISOString().slice(0,10)}, diffDays=${diff}, threshold=60`;
+  }catch(e){
+    // не падаем из-за пост-починки
+  }
 }
 
 async function processNow({ files, docType, citizenship, pathName, applicationDate, userName, wantDebug=false, wantDebugFull=false }){
@@ -244,7 +299,7 @@ async function processNow({ files, docType, citizenship, pathName, applicationDa
   }
 
   const mergedDataUrl = mergedJPEG ? `data:image/jpeg;base64,${mergedJPEG.toString('base64')}` : null;
-  const { basePrompt, schema, rules, fees } = await loadRules();
+  const { basePrompt, schema, rules } = await loadRules();
   const rulesForType = rules[docType] || { checks:[], fields:[] };
 
   const messages = buildMessages({
@@ -253,13 +308,15 @@ async function processNow({ files, docType, citizenship, pathName, applicationDa
     rulesForType,
     context: { docType, citizenship, path: pathName, applicationDate, userName },
     ocrText,
-    mergedImageDataUrl: mergedDataUrl,
-    fees
+    mergedImageDataUrl: mergedDataUrl
   });
 
   const result = await callLLM({ messages });
   result.ocrQuality = result.ocrQuality || estimateOcrQuality(ocrText||'');
   result.docType = result.docType || docType;
+
+  // === детерминированная поправка для "Платёж свежий" ===
+  enforcePaymentRecency(result, applicationDate);
 
   if(wantDebug){
     debug.ocrTextLen = (ocrText||'').length;
@@ -306,4 +363,3 @@ export default async function handler(req, res){
     bad(res, 500, e.message || 'Internal error');
   }
 }
-
