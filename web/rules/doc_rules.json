@@ -1,227 +1,377 @@
 {
   "wniosek": {
-    "fields": ["fullName", "address", "applicationBasis", "voivode", "signatures", "date"],
+    "title": "Wniosek o udzielenie zezwolenia na pobyt czasowy",
+    "fields": [
+      { "key": "applicant_name", "label": "Imię i nazwisko wnioskodawcy" },
+      { "key": "date_of_birth", "label": "Data urodzenia", "optional": true },
+      { "key": "voivode", "label": "Właściwy Wojewoda / adresat" },
+      { "key": "address", "label": "Adres zamieszkania" },
+      { "key": "legal_basis", "label": "Podstawa pobytu (praca/studia/rodzina itd.)" },
+      { "key": "submission_date", "label": "Data złożenia" },
+      { "key": "signature_present", "label": "Podpis wnioskodawcy (papier)", "type": "boolean", "optional": true },
+      { "key": "wniosek_trips", "label": "Zgłoszone wyjazdy/pobyt poza PL (ostatnie lata)", "type": "array", "optional": true }
+    ],
     "checks": [
-      {"id":"complete_required","title":"Все обязательные поля заполнены","severity":"high"},
-      {"id":"polish_language","title":"Анкета на польском, печатными буквами","severity":"medium"},
-      {"id":"signature_present","title":"Есть собственноручная подпись заявителя в нужном месте","severity":"high"},
-      {"id":"correct_voivode","title":"Адресат — корректный воевода по месту проживания","severity":"medium"},
-      {"id":"personal_data_match","title":"Данные совпадают с паспортом","severity":"high"}
+      { "key": "file_readable", "title": "Документ читается", "required": true },
+      { "key": "names_match_user", "title": "ФИО в анкете совпадает с ФИО пользователя", "required": true, "logic": "normalized(applicant_name) contains all tokens of userName" },
+      { "key": "form_complete", "title": "Обязательные поля заполнены", "required": true, "logic": "applicant_name, voivode, address, legal_basis not empty" },
+      { "key": "addressed_correctly", "title": "Адресовано верному Wojewoda", "required": true, "logic": "voivode matches region/address" },
+      { "key": "signature_present", "title": "Есть подпись (бумажная подача)", "required": false, "logic": "if paper version then signature_present true" },
+      { "key": "data_match_passport", "title": "Данные соответствуют паспорту", "required": false, "logic": "if passport fields present then applicant_name/date_of_birth match passport" },
+      { "key": "language_pl_or_sworn", "title": "Присяжный перевод, если не на PL", "required": false }
+    ],
+    "advice_presets": [
+      "Проверьте, что выбрали актуальный бланк для цели пребывания.",
+      "Подписывайте анкету в нужном поле; для MOS подпись заменяет электронная авторизация."
     ]
   },
-  "paszport": {
-    "fields": ["fullName", "dateOfBirth", "passportNumber", "issueDate", "expiryDate", "nationality"],
+
+  "passport": {
+    "title": "Paszport / Dokument podróży",
+    "fields": [
+      { "key": "passport_name", "label": "Nazwisko i imię (z dokumentu)" },
+      { "key": "passport_number", "label": "Numer paszportu" },
+      { "key": "nationality", "label": "Obywatelstwo", "optional": true },
+      { "key": "date_of_birth", "label": "Data urodzenia", "optional": true },
+      { "key": "issue_date", "label": "Data wydania" },
+      { "key": "expiry_date", "label": "Data ważności" },
+      { "key": "passport_stamps", "label": "Stemple/wizy (ostatnie lata)", "type": "array", "optional": true },
+      { "key": "mrz_lines", "label": "MRZ (jeśli widoczne)", "optional": true }
+    ],
     "checks": [
-      {"id":"validity_3m_after","title":"Срок действия ≥ 3 мес. после планируемого окончания пребывания","severity":"high"},
-      {"id":"issued_last_10y","title":"Паспорт выдан ≤ 10 лет назад","severity":"medium"},
-      {"id":"all_marked_pages","title":"Предоставлены все страницы со штампами/визами","severity":"medium"},
-      {"id":"matches_application","title":"Совпадение ФИО/даты рождения с анкетой","severity":"high"}
+      { "key": "file_readable", "title": "Документ читается", "required": true },
+      { "key": "names_match_user", "title": "ФИО в паспорте совпадает с ФИО пользователя", "required": true, "logic": "normalized(passport_name) contains all tokens of userName" },
+      { "key": "validity_ok", "title": "Срок действия достаточен", "required": true, "logic": "expiry_date >= applicationDate + 3 months (heuristic)" },
+      { "key": "issued_within_10y", "title": "Паспорт выдан ≤ 10 лет назад", "required": false },
+      { "key": "copies_complete", "title": "Копии страниц с визами/штампами приложены", "required": false, "logic": "passport_stamps.length >= 1 OR scan hints" },
+      { "key": "travel_history_consistency", "title": "Поездки согласованы с анкетой", "required": false, "logic": "if wniosek_trips present then compare with passport_stamps (years/countries) and note discrepancies" },
+      { "key": "mrz_integrity", "title": "MRZ выглядит корректно", "required": false },
+      { "key": "language_pl_or_sworn", "title": "Присяжный перевод, если требуется", "required": false }
+    ],
+    "advice_presets": [
+      "Сделайте чёткие сканы страниц с визами и штампами.",
+      "Если фамилия/имя менялись — приложите документ-основание (с переводом)."
     ]
   },
+
   "photo_biometric": {
-    "fields": ["date", "headPosition", "bgColor", "glasses", "headwear", "imageQuality"],
+    "title": "Zdjęcie biometryczne",
+    "fields": [
+      { "key": "background_uniform", "label": "Jednolite tło", "type": "boolean", "optional": true },
+      { "key": "face_ratio", "label": "Proporcja twarzy w kadrze", "optional": true },
+      { "key": "glasses_glare", "label": "Odbicia na okularach", "type": "boolean", "optional": true },
+      { "key": "headwear", "label": "Nakrycie głowy", "type": "boolean", "optional": true }
+    ],
     "checks": [
-      {"id":"recent_6m","title":"Фото не старше 6 месяцев","severity":"medium"},
-      {"id":"size_bg_face","title":"Размер/фон/доля лица соответствуют биометрическим нормам","severity":"high"},
-      {"id":"no_obstructions","title":"Нет теней/бликов/посторонних предметов","severity":"medium"},
-      {"id":"glasses_rules","title":"Очки (если есть) без бликов, прозрачные","severity":"low"}
+      { "key": "file_readable", "title": "Фото читается/видно лицо", "required": true },
+      { "key": "size_ratio_face", "title": "Размер лица в допуске", "required": false },
+      { "key": "background_uniform", "title": "Однородный светлый фон", "required": false },
+      { "key": "no_glare_glasses", "title": "Нет бликов на очках, видны глаза", "required": false },
+      { "key": "no_headwear", "title": "Нет головного убора (если не религиозный)", "required": false }
+    ],
+    "advice_presets": [
+      "Фото должно быть свежим (до 6 месяцев).",
+      "Смотрите официальные требования МВД к биометрии."
     ]
   },
+
   "oplata_skarbowa": {
-    "fields": ["amount", "recipientOffice", "accountNumber", "title", "payerName", "date"],
+    "title": "Opłata skarbowa — potwierdzenie przelewu/kwit",
+    "fields": [
+      { "key": "payer_name", "label": "Imię i nazwisko płatnika" },
+      { "key": "amount", "label": "Kwota" },
+      { "key": "recipient", "label": "Odbiorca (Urząd Miasta/Gminy)" },
+      { "key": "account_number", "label": "Nr rachunku" },
+      { "key": "title", "label": "Tytuł przelewu" },
+      { "key": "payment_date", "label": "Data płatności" }
+    ],
     "checks": [
-      {"id":"correct_amount","title":"Сумма соответствует цели заявления","severity":"high"},
-      {"id":"correct_recipient","title":"Получатель — правильный Urząd Miasta/województwo","severity":"high"},
-      {"id":"title_contains_name","title":"В назначении есть ФИО заявителя и цель платежа","severity":"high"}
+      { "key": "file_readable", "title": "Документ читается", "required": true },
+      { "key": "names_match_user_in_title", "title": "ФИО пользователя в назначении платежа", "required": true, "logic": "normalized(title or payer_name) contains userName tokens" },
+      { "key": "amount_correct", "title": "Сумма соответствует цели", "required": true, "logic": "amount equals expected fee for path/type (use fees table)" },
+      { "key": "recipient_correct", "title": "Правильный получатель/счёт", "required": true, "logic": "recipient/account_number matches city/voivodeship mapping" },
+      { "key": "payment_date_recent", "title": "Платёж свежий", "required": false }
+    ],
+    "advice_presets": [
+      "В тайтле укажите цель и ФИО: np. 'Opłata skarbowa – Jan Kowalski'."
     ]
   },
-  "najmu_standard": {
-    "fields": ["tenantName","landlordName","address","periodFrom","periodTo","rentAmount","signatures"],
+
+  "insurance": {
+    "title": "Ubezpieczenie zdrowotne (ZUS / NFZ / prywatne)",
+    "fields": [
+      { "key": "insured_name", "label": "Zgłoszona osoba ubezpieczona (imię i nazwisko)" },
+      { "key": "type", "label": "Typ dokumentu (ZUA/RCA/RMUA/NFZ/prywatna polisa)" },
+      { "key": "valid_from", "label": "Ważne od", "optional": true },
+      { "key": "valid_to", "label": "Ważne do", "optional": true },
+      { "key": "coverage_keywords", "label": "Słowa kluczowe pokrycia (np. 'koszty leczenia')", "optional": true },
+      { "key": "payment_proof", "label": "Potwierdzenie opłaty (jeśli dotyczy)", "type": "boolean", "optional": true }
+    ],
     "checks": [
-      {"id":"address_complete","title":"Полный адрес (улица/дом/кв/индекс/город)","severity":"high"},
-      {"id":"period_covers","title":"Срок охватывает период рассмотрения/пребывания","severity":"high"},
-      {"id":"both_signatures","title":"Подписи обеих сторон","severity":"high"},
-      {"id":"language_pl","title":"Документ на польском или с присяжным переводом","severity":"medium"}
+      { "key": "file_readable", "title": "Документ читается", "required": true },
+      { "key": "names_match_user", "title": "Полис на имя пользователя", "required": true, "logic": "normalized(insured_name) contains userName tokens" },
+      { "key": "coverage_treatment", "title": "Покрывает лечение (не только NNW)", "required": true, "logic": "coverage_keywords contains 'koszty leczenia' or equivalent" },
+      { "key": "valid_on_decision_date", "title": "Действует на дату решения", "required": true, "logic": "valid_to sufficiently after applicationDate" },
+      { "key": "payment_proof_present", "title": "Прикреплено подтверждение оплаты", "required": false, "logic": "payment_proof true for private/NFZ" }
+    ],
+    "advice_presets": [
+      "Для иностранных полисов — присяжный перевод."
     ]
   },
-  "najmu_okazjonalny": {
-    "fields": ["tenantName","landlordName","address","periodFrom","periodTo","rentAmount","signatures","notaryRef"],
+
+  "financial_resources": {
+    "title": "Wystarczające środki finansowe (umowa/wypłaty/wyciąg)",
+    "fields": [
+      { "key": "holder_name", "label": "Posiadacz rachunku / beneficjent" },
+      { "key": "statement_period", "label": "Okres wyciągu", "optional": true },
+      { "key": "regular_inflows", "label": "Regularne wpływy", "type": "boolean", "optional": true },
+      { "key": "net_income_estimate", "label": "Szacowany dochód netto", "optional": true },
+      { "key": "dependants_count", "label": "Liczba członków rodziny", "optional": true },
+      { "key": "bank_country", "label": "Kraj banku", "optional": true }
+    ],
     "checks": [
-      {"id":"okazjonalny_attachments","title":"Доп. элементы okazjonalny (нотариальные/оświadczenia) указаны/приложены","severity":"high"},
-      {"id":"address_complete","title":"Полный адрес","severity":"high"},
-      {"id":"both_signatures","title":"Подписи обеих сторон","severity":"high"}
+      { "key": "file_readable", "title": "Документ читается", "required": true },
+      { "key": "names_match_user", "title": "Имя владельца совпадает с пользователем", "required": true, "logic": "normalized(holder_name) contains userName tokens" },
+      { "key": "bank_statement_recent", "title": "Выписка свежая (≤ 30 дней)", "required": true },
+      { "key": "income_threshold", "title": "Доход ≥ порога (с учётом семьи)", "required": true, "logic": "net_income_estimate >= threshold for family size" },
+      { "key": "regular_inflows_check", "title": "Есть регулярные поступления", "required": false },
+      { "key": "bank_eu_or_pl", "title": "Банк в PL/EU (рекомендация)", "required": false }
+    ],
+    "advice_presets": [
+      "Избегайте одного крупного депозита непосредственно перед выпиской — это вызывает вопросы."
     ]
   },
-  "uzyczenie": {
-    "fields": ["giverName","receiverName","address","periodFrom","periodTo","signatures"],
+
+  "housing": {
+    "title": "Zapewnione miejsce zamieszkania (najem/użyczenie/oświadczenie/KW/meldunek)",
+    "fields": [
+      { "key": "tenant_name", "label": "Najemca/korzystający (imię i nazwisko)" },
+      { "key": "address", "label": "Adres lokalu" },
+      { "key": "valid_to", "label": "Umowa ważna do", "optional": true },
+      { "key": "owner_name", "label": "Właściciel (dla oświadczenia)", "optional": true },
+      { "key": "is_sublease", "label": "Podnajem/subnajem", "type": "boolean", "optional": true }
+    ],
     "checks": [
-      {"id":"address_complete","title":"Полный адрес","severity":"high"},
-      {"id":"period_covers","title":"Срок достаточен для пребывания","severity":"medium"},
-      {"id":"signatures","title":"Подписи сторон","severity":"high"}
+      { "key": "file_readable", "title": "Документ читается", "required": true },
+      { "key": "names_match_user", "title": "Заявитель указан стороной договора", "required": true, "logic": "normalized(tenant_name) contains userName tokens" },
+      { "key": "contract_validity", "title": "Срок договора достаточный", "required": true, "logic": "valid_to sufficiently after applicationDate/decision" },
+      { "key": "address_matches_wniosek", "title": "Адрес совпадает с анкетой", "required": false },
+      { "key": "signatures_present", "title": "Подписи/печати присутствуют", "required": false },
+      { "key": "sublease_chain_ok", "title": "При субаренде приложен основной договор", "required": false },
+      { "key": "owner_statement_complete", "title": "Для oświadczenie есть владелец/адрес/период/подпись", "required": false }
+    ],
+    "advice_presets": [
+      "Для oświadczenie укажите номер księgi wieczystej (если есть)."
     ]
   },
-  "zameldowanie": {
-    "fields": ["fullName","address","validFrom","validTo","issuer","stampOrQR"],
+
+  "work_standard": {
+    "title": "Pobyt czasowy i pracę — standard",
+    "fields": [
+      { "key": "employee_name", "label": "Pracownik (imię i nazwisko)" },
+      { "key": "position", "label": "Stanowisko" },
+      { "key": "salary_brutto", "label": "Wynagrodzenie brutto", "optional": true },
+      { "key": "salary_netto", "label": "Wynagrodzenie netto (est.)", "optional": true },
+      { "key": "hours_place", "label": "Wymiar czasu / miejsce pracy", "optional": true },
+      { "key": "zalacznik1_signed_by", "label": "Podpis w Załączniku nr 1", "optional": true }
+    ],
     "checks": [
-      {"id":"address_readable","title":"Адрес читаем и полный","severity":"high"},
-      {"id":"dates_present","title":"Указаны даты регистрации","severity":"medium"},
-      {"id":"authority","title":"Есть орган/печать/QR","severity":"medium"}
+      { "key": "file_readable", "title": "Пакет читается", "required": true },
+      { "key": "names_match_user_zal1", "title": "ФИО работника в Zał.1 = пользователь", "required": true, "logic": "employee_name (from Zał.1) matches userName" },
+      { "key": "names_match_user_contract", "title": "ФИО в договоре = пользователь", "required": true },
+      { "key": "salary_meets_threshold", "title": "Ставка ≥ минимально требуемой", "required": true },
+      { "key": "position_hours_place_consistency", "title": "Согласованность должности/часов/места (договор ↔ Zał.1)", "required": true },
+      { "key": "zal1_signed_by_authorized", "title": "Zał.1 подписан уполномоченным лицом", "required": false },
+      { "key": "starosta_info_required_or_exempt", "title": "Informacja Starosty: требуется или освобождение", "required": false }
+    ],
+    "advice_presets": [
+      "Проверьте, что подпись на Zał.1 принадлежит лицу, уполномоченному в KRS/CEIDG."
     ]
   },
-  "akt_wlasnosci": {
-    "fields": ["ownerName","address","notary","date"],
+
+  "blue_card": {
+    "title": "Niebieska Karta UE",
+    "fields": [
+      { "key": "employee_name", "label": "Pracownik (imię i nazwisko)" },
+      { "key": "position", "label": "Stanowisko/specjalizacja" },
+      { "key": "salary_brutto", "label": "Wynagrodzenie brutto", "optional": true },
+      { "key": "salary_netto", "label": "Wynagrodzenie netto (est.)", "optional": true },
+      { "key": "qualification_proofs", "label": "Dyplomy/kwalifikacje", "optional": true }
+    ],
     "checks": [
-      {"id":"owner_address_link","title":"Связь владельца и адреса прослеживается","severity":"high"}
+      { "key": "file_readable", "title": "Пакет читается", "required": true },
+      { "key": "names_match_user_contract", "title": "ФИО в договоре = пользователь", "required": true },
+      { "key": "salary_above_bc_floor", "title": "Ставка выше порога Blue Card", "required": true },
+      { "key": "qualification_proof_present", "title": "Подтверждена квалификация", "required": true },
+      { "key": "occupation_qualified_match", "title": "Профиль работы соответствует квалификации", "required": false },
+      { "key": "no_starosta_needed", "title": "Тест рынка труда не требуется", "required": false }
+    ],
+    "advice_presets": [
+      "Приложите официальный перевод дипломов."
     ]
   },
-  "oswiadczenie_wlasciciela": {
-    "fields": ["ownerName","applicantName","address","period","signature","proofOfOwnership"],
+
+  "business": {
+    "title": "Działalność Gospodarcza",
+    "fields": [
+      { "key": "person_name", "label": "Imię i nazwisko wnioskodawcy" },
+      { "key": "role_in_entity", "label": "Rola (zarząd/wspólnik/właściciel)" },
+      { "key": "registrations", "label": "KRS/CEIDG/umowa spółki", "optional": true },
+      { "key": "tax_clearance", "label": "Zaświadczenie US (niezaleganie)", "optional": true },
+      { "key": "zus_clearance", "label": "Zaświadczenie ZUS (niezaleganie)", "optional": true },
+      { "key": "financials", "label": "Wyniki finansowe/obroty", "optional": true },
+      { "key": "personal_income", "label": "Dochód osobisty", "optional": true }
+    ],
     "checks": [
-      {"id":"all_fields","title":"Есть данные владельца/заявителя/полный адрес/период/подпись","severity":"high"},
-      {"id":"ownership_proof","title":"Приложено подтверждение права собственности (напр. KW)","severity":"medium"}
+      { "key": "file_readable", "title": "Пакет читается", "required": true },
+      { "key": "names_match_user", "title": "Роль/реестр указывает на пользователя", "required": true, "logic": "normalized(person_name) contains userName tokens" },
+      { "key": "registrations_present", "title": "Регистрационные документы приложены", "required": true },
+      { "key": "tax_zus_clearances_recent", "title": "Справки US/ZUS свежие и без задолженностей", "required": true },
+      { "key": "business_financials_ok", "title": "Финпоказатели достаточны", "required": false },
+      { "key": "personal_income_ok", "title": "Личный доход подтверждён", "required": false }
     ]
   },
-  "hotel_dorm": {
-    "fields": ["guestName","address","periodFrom","periodTo","stampOrInvoice"],
+
+  "student": {
+    "title": "Studia wyższe — zezwolenie",
+    "fields": [
+      { "key": "student_name", "label": "Imię i nazwisko studenta" },
+      { "key": "enrollment_doc", "label": "Zaświadczenie o przyjęciu", "optional": true },
+      { "key": "tuition_payment", "label": "Potwierdzenie opłaty", "optional": true },
+      { "key": "housing_doc", "label": "Mieszkanie (umowa/oświadczenie)", "optional": true },
+      { "key": "insurance_doc", "label": "Ubezpieczenie zdrowotne", "optional": true },
+      { "key": "funds_proof", "label": "Środki finansowe", "optional": true }
+    ],
     "checks": [
-      {"id":"name_address_dates","title":"Имя/адрес/даты проживания присутствуют","severity":"high"}
+      { "key": "file_readable", "title": "Пакет читается", "required": true },
+      { "key": "names_match_user", "title": "Имя в документах = пользователь", "required": true, "logic": "normalized(student_name) contains userName tokens" },
+      { "key": "enrollment_proof", "title": "Есть справка о зачислении", "required": true },
+      { "key": "tuition_payment", "title": "Оплата обучения подтверждена", "required": true },
+      { "key": "funds_sufficient", "title": "Средства на период обучения достаточны", "required": true },
+      { "key": "insurance_ok", "title": "Страхование валидно", "required": true },
+      { "key": "housing_ok", "title": "Жильё подтверждено", "required": true }
     ]
   },
-  "umowa_o_prace": {
-    "fields": ["employerName","employerNIP","employeeName","position","gross","startDate","endDate","signatures"],
+
+  "family_reunification": {
+    "title": "Połączenie z rodziną",
+    "fields": [
+      { "key": "applicant_name", "label": "Wnioskodawca" },
+      { "key": "anchor_name", "label": "Osoba zapraszająca ('kotwica')" },
+      { "key": "relationship_doc", "label": "Dowód pokrewieństwa (akt małżeństwa/urodzenia)", "optional": true },
+      { "key": "anchor_status", "label": "Status pobytowy kotwicy", "optional": true },
+      { "key": "anchor_housing_income", "label": "Mieszkanie i środki kotwicy", "optional": true }
+    ],
     "checks": [
-      {"id":"employer_ident","title":"Идентификаторы работодателя (NIP/адрес)","severity":"medium"},
-      {"id":"salary_enough","title":"Оклад ≥ минимального нетто (эвристика)","severity":"high"},
-      {"id":"signatures","title":"Подписи сторон","severity":"high"}
+      { "key": "file_readable", "title": "Пакет читается", "required": true },
+      { "key": "names_match_user", "title": "Имя заявителя соответствует пользователю", "required": true, "logic": "normalized(applicant_name) contains userName tokens" },
+      { "key": "anchor_status_valid", "title": "Статус 'якоря' действителен", "required": true },
+      { "key": "family_ties_proven", "title": "Родство подтверждено (с переводом/апостилем)", "required": true },
+      { "key": "anchor_housing_income_ok", "title": "Жильё/доход 'якоря' достаточны", "required": true }
+    ],
+    "advice_presets": [
+      "Документы UA/BY/RU требуют апостиля и присяжного перевода."
     ]
   },
-  "umowa_zlecenie": {
-    "fields": ["employerName","employeeName","rate","hoursOrScope","period","signatures"],
-    "checks": [
-      {"id":"rate_scope","title":"Ставка/объём/срок указаны","severity":"medium"},
-      {"id":"income_stability","title":"Доход и стабильность достаточны (эвристика)","severity":"medium"}
-    ]
-  },
-  "zezwolenie_typ_A": {
-    "fields": ["voivode","employerName","position","issueDate","validTo","number"],
-    "checks": [
-      {"id":"validity","title":"Разрешение действует на период работы","severity":"high"},
-      {"id":"matches_contract","title":"Соответствует договору по позиции/работодателю","severity":"high"}
-    ]
-  },
-  "informacja_starosty": {
-    "fields": ["county","issueDate","validTo"],
-    "checks": [
-      {"id":"valid_window","title":"В пределах срока действия (напр. 90–180 дней)","severity":"medium"}
-    ]
-  },
-  "zalacznik_nr_1": {
-    "fields": ["employerRep","signature","salary","hours","workplace"],
-    "checks": [
-      {"id":"signed_by_authorized","title":"Подписан уполномоченным лицом (KRS/CEIDG)","severity":"high"},
-      {"id":"consistency_with_contract","title":"Согласован с договором по зарплате/условиям","severity":"high"}
-    ]
-  },
-  "zaswiadczenie_uczelnia": {
-    "fields": ["studentName","university","program","studyForm","issueDate","validTo","stamp"],
-    "checks": [
-      {"id":"freshness","title":"Справка свежая (≤ 30–60 дней)","severity":"medium"},
-      {"id":"covers_period","title":"Охватывает период учёбы","severity":"medium"}
-    ]
-  },
-  "ubezpieczenie_zus": {
-    "fields": ["insuredName","docType","periodFrom","periodTo","employer","stamp"],
-    "checks": [
-      {"id":"insured_present","title":"Заявитель указан как застрахованный","severity":"high"},
-      {"id":"freshness","title":"Документ свежий (≤ 1–3 месяцев)","severity":"medium"}
-    ]
-  },
-  "ubezpieczenie_prywatne": {
-    "fields": ["provider","coverageFrom","coverageTo","territory","paymentProof"],
-    "checks": [
-      {"id":"covers_treatment","title":"Покрывает лечение в Польше (koszty leczenia)","severity":"high"},
-      {"id":"long_enough","title":"Срок покрытия достаточен (на период решения)","severity":"high"},
-      {"id":"payment_proof","title":"Есть подтверждение оплаты","severity":"medium"}
-    ]
-  },
-  "ubezpieczenie_nfz": {
-    "fields": ["contractNumber","coverageFrom","coverageTo","paymentsProof"],
-    "checks": [
-      {"id":"contract_present","title":"Договор с NFZ присутствует","severity":"high"},
-      {"id":"payments_recent","title":"Недавние оплаты взносов","severity":"medium"}
-    ]
-  },
-  "wyciag_bankowy": {
-    "fields": ["ownerName","bank","issueDate","balance","inflows"],
-    "checks": [
-      {"id":"fresh_30d","title":"Выписка не старше 30 дней","severity":"high"},
-      {"id":"owner_match","title":"Владелец совпадает с заявителем","severity":"high"},
-      {"id":"regular_inflows","title":"Регулярные поступления, не единичный крупный депозит","severity":"medium"}
-    ]
-  },
-  "pit_11": {
-    "fields": ["year","payer","amounts","stamp"],
-    "checks": [
-      {"id":"year_ok","title":"Корректный год и суммы","severity":"medium"}
-    ]
-  },
-"pit_37": {
-  "title": "PIT-37 (roczne zeznanie podatkowe)",
-  "fields": [
-    { "key": "year", "label": "Rok podatkowy (np. 2022/2023)" },
-    { "key": "taxpayer_name", "label": "Nazwisko i imię podatnika" },
-    { "key": "taxpayer_pesel_or_nip", "label": "PESEL lub NIP podatnika" },
-    { "key": "spouse_name", "label": "Nazwisko i imię małżonka", "optional": true },
-    { "key": "spouse_pesel_or_nip", "label": "PESEL lub NIP małżonka", "optional": true },
-    { "key": "filing_mode", "label": "Sposób rozliczenia (samodzielnie/wspólnie z małżonkiem)" },
-    { "key": "tax_office", "label": "Urząd skarbowy" },
-    { "key": "amounts", "label": "Kwoty (przychód/dochod/podatek/nadpłata)", "type": "object" },
-    { "key": "submission_date", "label": "Data złożenia", "optional": true },
-    { "key": "signature_present", "label": "Podpis(y) lub kwalifikowany podpis/ePUAP", "type": "boolean", "optional": true }
-  ],
-  "checks": [
-    { "key": "has_year", "title": "Указан год декларации", "required": true,
-      "logic": "year is a 4-digit >= 2000" },
-    { "key": "has_taxpayer_name", "title": "Найдено ФИО налогоплательщика", "required": true,
-      "logic": "taxpayer_name not empty" },
-    { "key": "has_id_taxpayer", "title": "Указан PESEL/NIP налогоплательщика", "required": true,
-      "logic": "taxpayer_pesel_or_nip matches (\\b\\d{11}\\b|\\b\\d{10}\\b)" },
-    { "key": "spouse_consistency", "title": "Согласованность режима совместного декларирования", "required": false,
-      "logic": "if filing_mode indicates joint => spouse_name and spouse_pesel_or_nip present" },
-    { "key": "names_match_user", "title": "ФИО в PIT совпадает с ФИО пользователя", "required": true,
-      "logic": "normalized userName tokens must be all contained in taxpayer_name OR spouse_name" },
-    { "key": "amounts_present", "title": "Присутствуют ключевые суммы (доход/налог/надплата)", "required": true,
-      "logic": "amounts has any of [totalIncome, taxDue, overpayment]" },
-    { "key": "tax_office_present", "title": "Указан налоговый орган", "required": false,
-      "logic": "tax_office not empty" },
-    { "key": "signature_check", "title": "Подпись/КЭП присутствует (если бумажная форма)", "required": false,
-      "logic": "if PDF is scan => signature_present true OR advice to sign; if ePUAP/interactive => can be false" }
-  ],
-  "advice_presets": [
-    "Если документ подается в бумаге — требуется собственноручная подпись(и) в соответствующих полях.",
-    "Проверьте корректность PESEL/NIP и соответствие ФИО данным паспорта.",
-    "Если декларация совместная — обязательно укажите данные супруга/супруги."
-  ]
-},
+
   "pesel_ukr": {
-    "fields": ["pesel","ukrFlag","fullName","issueDate"],
+    "title": "PESEL UKR — powiadomienie",
+    "fields": [
+      { "key": "holder_name", "label": "Imię i nazwisko" },
+      { "key": "pesel", "label": "Numer PESEL" },
+      { "key": "ukr_mark", "label": "Status UKR (oznaczenie)", "optional": true }
+    ],
     "checks": [
-      {"id":"has_ukr_flag","title":"Есть пометка UKR","severity":"high"},
-      {"id":"pesel_11_digits","title":"PESEL состоит из 11 цифр","severity":"high"}
+      { "key": "file_readable", "title": "Документ читается", "required": true },
+      { "key": "names_match_user", "title": "Имя в PESEL совпадает с пользователем", "required": true, "logic": "normalized(holder_name) contains userName tokens" },
+      { "key": "has_pesel_11", "title": "PESEL = 11 цифр", "required": true },
+      { "key": "has_ukr_mark", "title": "Присутствует пометка 'UKR'", "required": true },
+      { "key": "diia_hint", "title": "Подсказка про Diia.pl", "required": false }
     ]
   },
-  "diia_pl": {
-    "fields": ["holder","validity","qr"],
+
+  "visa_d21": {
+    "title": "Wiza krajowa D-21 (BY)",
+    "fields": [
+      { "key": "holder_name", "label": "Nazwisko i imię" },
+      { "key": "visa_type", "label": "Typ wizy (D)" },
+      { "key": "remarks_code", "label": "Kod w uwagach (21)" },
+      { "key": "valid_from", "label": "Ważna od", "optional": true },
+      { "key": "valid_to", "label": "Ważna do", "optional": true },
+      { "key": "mrz_lines", "label": "MRZ (jeśli widoczne)", "optional": true }
+    ],
     "checks": [
-      {"id":"present","title":"Документ присутствует и читаем","severity":"medium"}
+      { "key": "file_readable", "title": "Документ читается", "required": true },
+      { "key": "names_match_user", "title": "ФИО на визе = пользователь", "required": true, "logic": "normalized(holder_name) contains userName tokens" },
+      { "key": "visa_type_d", "title": "Тип визы — D", "required": true },
+      { "key": "code_21_present", "title": "В 'Uwagi' есть код 21", "required": true },
+      { "key": "visa_valid_now", "title": "Виза действительна на момент подачи", "required": true },
+      { "key": "mrz_consistency", "title": "MRZ в базовой согласованности", "required": false }
     ]
   },
-  "wiza_D21": {
-    "fields": ["type","code","validFrom","validTo","holder"],
+
+  "pit_37": {
+    "title": "PIT-37 (roczne zeznanie podatkowe)",
+    "fields": [
+      { "key": "year", "label": "Rok podatkowy" },
+      { "key": "taxpayer_name", "label": "Podatnik — nazwisko i imię" },
+      { "key": "taxpayer_pesel_or_nip", "label": "PESEL/NIP podatnika" },
+      { "key": "spouse_name", "label": "Małżonek — nazwisko i imię", "optional": true },
+      { "key": "spouse_pesel_or_nip", "label": "PESEL/NIP małżonka", "optional": true },
+      { "key": "filing_mode", "label": "Sposób rozliczenia (samodzielnie/wspólnie)" },
+      { "key": "tax_office", "label": "Urząd Skarbowy", "optional": true },
+      { "key": "amounts", "label": "Kwoty (przychód/dochod/podatek/nadpłata)", "type": "object" },
+      { "key": "submission_date", "label": "Data złożenia", "optional": true },
+      { "key": "signature_present", "label": "Podpis/ePUAP/kwalifikowany", "type": "boolean", "optional": true }
+    ],
     "checks": [
-      {"id":"type_D","title":"TYPE OF VISA = D","severity":"high"},
-      {"id":"code_21","title":"UWAGI содержит код 21","severity":"high"},
-      {"id":"valid_now","title":"Виза действительна на момент подачи","severity":"high"}
+      { "key": "file_readable", "title": "Декларация читается", "required": true },
+      { "key": "has_year", "title": "Указан год", "required": true, "logic": "year is 4-digit >= 2000" },
+      { "key": "has_taxpayer_name", "title": "Найдено ФИО налогоплательщика", "required": true, "logic": "taxpayer_name not empty" },
+      { "key": "has_id_taxpayer", "title": "Указан PESEL/NIP налогоплательщика", "required": true, "logic": "matches 11 or 10 digits" },
+      { "key": "spouse_consistency", "title": "Совместное декларирование → данные супруга", "required": false, "logic": "if filing_mode joint then spouse_name and spouse_pesel_or_nip present" },
+      { "key": "names_match_user", "title": "ФИО в PIT совпадает с пользователем", "required": true, "logic": "userName tokens in taxpayer_name OR spouse_name if joint" },
+      { "key": "amounts_present", "title": "Есть ключевые суммы (доход/налог/надплата)", "required": true },
+      { "key": "tax_office_present", "title": "Указан налоговый орган", "required": false },
+      { "key": "signature_check", "title": "Подпись/КЭП корректны (для бумаги/электронно)", "required": false }
+    ]
+  },
+
+  "bank_statement": {
+    "title": "Wyciąg bankowy",
+    "fields": [
+      { "key": "account_holder_name", "label": "Posiadacz rachunku" },
+      { "key": "period", "label": "Okres wyciągu" },
+      { "key": "bank_country", "label": "Kraj banku", "optional": true },
+      { "key": "regular_inflows", "label": "Regularne wpływy", "type": "boolean", "optional": true }
+    ],
+    "checks": [
+      { "key": "file_readable", "title": "Выписка читается", "required": true },
+      { "key": "names_match_user", "title": "Владелец счёта = пользователь", "required": true, "logic": "normalized(account_holder_name) contains userName tokens" },
+      { "key": "recent_enough", "title": "Срок документа ≤ 30 дней", "required": true },
+      { "key": "regular_inflows", "title": "Есть регулярные поступления", "required": false },
+      { "key": "bank_eu_or_pl", "title": "Банк в PL/EU (совет)", "required": false }
+    ]
+  },
+
+  "cert_no_arrears": {
+    "title": "Zaświadczenie o niezaleganiu (US/ZUS)",
+    "fields": [
+      { "key": "person_name", "label": "Imię i nazwisko / PESEL/NIP" },
+      { "key": "authority", "label": "Organ (US/ZUS)" },
+      { "key": "status_text", "label": "Treść (nie zalega)" },
+      { "key": "issue_date", "label": "Data wydania" },
+      { "key": "seal_or_qr", "label": "Pieczęć / QR / nr referencyjny", "optional": true }
+    ],
+    "checks": [
+      { "key": "file_readable", "title": "Справка читается", "required": true },
+      { "key": "names_match_user", "title": "Лицо в справке = пользователь", "required": true, "logic": "normalized(person_name) contains userName tokens or matching PESEL/NIP" },
+      { "key": "status_no_arrears", "title": "Статус: nie zalega", "required": true },
+      { "key": "recent_enough", "title": "Справка свежая (30–90 дней)", "required": true },
+      { "key": "official_seal_signature", "title": "Печать/подпись/QR присутствуют", "required": false }
+    ],
+    "advice_presets": [
+      "Для электронных справок приложите номер/QR для верификации."
     ]
   }
 }
