@@ -1,0 +1,311 @@
+<!-- web/lab-docs.html -->
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <title>eMigrant · Лаборатория проверки документов</title>
+  <link rel="stylesheet" href="./styles.css" />
+  <style>
+    .kv {display:grid;grid-template-columns:120px 1fr;gap:8px 12px}
+    .grid2 {display:grid;grid-template-columns:1fr;gap:12px}
+    @media (min-width:740px){ .grid2{grid-template-columns:1fr 1fr} }
+    .mono{font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size:13px; line-height:1.4}
+    .tag{display:inline-block;border:1px solid var(--line);border-radius:999px;padding:2px 8px;margin-right:6px}
+    details > summary{cursor:pointer}
+    .pass{color:var(--ok)}
+    .fail{color:var(--danger)}
+    .uncertain{color:var(--warn)}
+    .small-muted{font-size:12px;color:var(--muted)}
+    .codeblock{white-space:pre-wrap; word-break:break-word; overflow-wrap:anywhere; background:var(--ink); border:1px solid var(--line); padding:12px; border-radius:12px}
+    .row-gap{display:flex;flex-direction:column;gap:8px}
+    .pill{display:inline-flex;align-items:center;gap:6px;border:1px solid var(--line);border-radius:999px;padding:4px 10px;margin:2px 6px 2px 0}
+    .pill .dot{width:8px;height:8px;border-radius:999px;background:var(--muted)}
+    .pill.pass .dot{background:var(--ok)}
+    .pill.fail .dot{background:var(--danger)}
+    .pill.uncertain .dot{background:var(--warn)}
+    .table{width:100%;border-collapse:collapse}
+    .table th,.table td{border-top:1px solid var(--line);padding:8px;vertical-align:top}
+    .table th{text-align:left;color:var(--muted);font-weight:600}
+    .hint{font-size:12px;color:var(--muted)}
+    .inline-flex{display:inline-flex;gap:8px;flex-wrap:wrap}
+  </style>
+</head>
+<body>
+  <div class="container screen">
+    <header class="header">
+      <div class="h1">Лаборатория проверки документов</div>
+      <div class="lang" id="langSwitch">
+        <button data-lang="ru" class="active">RU</button>
+        <button data-lang="ua">UA</button>
+        <button data-lang="by">BY</button>
+      </div>
+    </header>
+
+    <div class="card">
+      <div class="p">Эта страница предназначена для внутреннего теста OCR/LLM-пайплайна по документам (PDF/изображения) и правил проверки.</div>
+      <div class="hint">Совет: для PDF сначала глянь «Preview», чтобы понять, видит ли сервер текстовый слой и удаётся ли отрендерить страницы.</div>
+    </div>
+
+    <div class="card" style="margin-top:12px">
+      <div class="h2">Входные параметры</div>
+      <div class="row">
+        <div class="col" style="flex:2">
+          <label class="small-muted">Тип документа (docType)</label>
+          <select id="docType" class="input">
+            <option value="">— выбирайте —</option>
+          </select>
+        </div>
+        <div class="col" style="flex:1">
+          <label class="small-muted">Гражданство</label>
+          <input id="citizenship" class="input" placeholder="ua/by/ru/..." />
+        </div>
+      </div>
+      <div class="row" style="margin-top:8px">
+        <div class="col" style="flex:1">
+          <label class="small-muted">Путь/основание (path)</label>
+          <input id="pathName" class="input" placeholder="work/study/regularize/..." />
+        </div>
+        <div class="col" style="flex:1">
+          <label class="small-muted">Дата подачи</label>
+          <input id="applicationDate" type="date" class="input" />
+        </div>
+      </div>
+
+      <div class="row" style="margin-top:8px">
+        <div class="col">
+          <label class="small-muted">Файлы (1 PDF до 20 стр. или до 20 изображений, ≤ 30 MB)</label>
+          <input id="fileInput" type="file" class="input" multiple accept="application/pdf,image/*" />
+          <small class="hint">Важно: для PDF загружайте ровно один файл.</small>
+        </div>
+      </div>
+
+      <div class="row" style="margin-top:8px">
+        <div class="inline-flex">
+          <label><input type="checkbox" id="wantPreview" checked /> Сначала запустить Preview (pdf-ocr-preview)</label>
+          <label><input type="checkbox" id="previewDoOCR" /> OCR 1-й страницы (дороже)</label>
+          <label><input type="checkbox" id="debugFullText" /> Возвращать полный OCR-текст (до 20k)</label>
+          <label><input type="checkbox" id="debugInVerify" checked /> Включить debug в verify-document</label>
+        </div>
+      </div>
+
+      <div class="row" style="margin-top:12px">
+        <button id="btnRun" class="btn full">Запустить проверку</button>
+      </div>
+    </div>
+
+    <div class="grid2" style="margin-top:12px">
+      <div class="card" id="previewCard">
+        <div class="h2">Preview (низкоуровневые метрики OCR)</div>
+        <div id="previewStatus" class="muted small-muted">Ещё не запускалось.</div>
+        <div id="previewOut" class="row-gap" style="margin-top:8px"></div>
+      </div>
+
+      <div class="card" id="verifyCard">
+        <div class="h2">Результат LLM-проверки</div>
+        <div id="verifyStatus" class="muted small-muted">Ещё не запускалось.</div>
+        <div id="verifyOut" class="row-gap" style="margin-top:8px"></div>
+      </div>
+    </div>
+
+    <footer class="footer">
+      <nav class="tabs">
+        <a class="tab" href="./translator.html">Переводчик</a>
+        <a class="tab" href="./checklist.html">Чеклист</a>
+        <a class="tab" href="./consultant.html">Консультант</a>
+      </nav>
+    </footer>
+  </div>
+
+<script>
+const $ = (s) => document.querySelector(s);
+const outPreview = $("#previewOut");
+const outVerify  = $("#verifyOut");
+const stPreview  = $("#previewStatus");
+const stVerify   = $("#verifyStatus");
+
+function humanBytes(n){
+  if(!n && n!==0) return '';
+  const u=['B','KB','MB','GB']; let i=0, v=n;
+  while(v>900 && i<u.length-1){ v/=1024; i++; }
+  return v.toFixed(1)+' '+u[i];
+}
+function pill(status, text){
+  const cls = status==='pass'?'pass':status==='fail'?'fail':'uncertain';
+  return `<span class="pill ${cls}"><span class="dot"></span><span>${text}</span></span>`;
+}
+function esc(s){ return (s??'').toString().replace(/[&<>]/g, m=>({ '&':'&amp;','<':'&lt;','>':'&gt;' }[m])); }
+
+async function loadDocTypes(){
+  try{
+    const r = await fetch('./rules/doc_rules.json', { cache:'no-store' });
+    const js = await r.json();
+    const sel = $("#docType");
+    const keys = Object.keys(js||{}).sort();
+    for(const k of keys){ const o=document.createElement('option'); o.value=k; o.textContent=k; sel.appendChild(o); }
+  }catch(e){
+    console.warn('doc_rules.json not found or invalid', e);
+  }
+}
+
+// lang switch (минимальный, без словаря — для dev-экрана ок)
+(function initLang(){
+  const ls = $("#langSwitch");
+  const cur = localStorage.lang || 'ru';
+  for(const b of ls.querySelectorAll('button')){
+    b.classList.toggle('active', b.dataset.lang===cur);
+    b.onclick = ()=>{ localStorage.lang=b.dataset.lang; for(const x of ls.querySelectorAll('button')) x.classList.toggle('active', x===b); };
+  }
+})();
+
+async function runPreview(fd){
+  stPreview.textContent = 'Выполняю preview…';
+  outPreview.innerHTML = '';
+  try{
+    const doOCR   = $("#previewDoOCR").checked;
+    const fullTxt = $("#debugFullText").checked;
+    if(doOCR){ fd.append('do_ocr', '1'); if(fullTxt) fd.append('ocr_full', '1'); }
+    const r = await fetch('/api/pdf-ocr-preview', { method:'POST', body: fd });
+    const js = await r.json();
+    if(!r.ok){ throw new Error(js?.error||('HTTP '+r.status)); }
+    stPreview.textContent = 'Готово.';
+    const meta = js.meta||{};
+    const smp  = js.sample||{};
+    outPreview.innerHTML = `
+      <div class="kv">
+        <div class="muted">pdf-parse len</div><div>${meta.pdfParseLen??0}</div>
+        <div class="muted">pdf.js len</div><div>${meta.pdfjsLen??0}</div>
+        <div class="muted">pdf.js pages</div><div>${meta.pdfjsPagesTried??0} / ${meta.totalPages??0}</div>
+        <div class="muted">rendered pages</div><div>${meta.renderedPages??0}</div>
+        <div class="muted">merged JPEG</div><div>${humanBytes(meta.mergedJpegBytes||0)}</div>
+      </div>
+      <details style="margin-top:8px">
+        <summary>Фрагменты извлечённого текста</summary>
+        <div class="row-gap" style="margin-top:6px">
+          <div><div class="small-muted">pdf-parse head</div><div class="codeblock mono">${esc(smp.pdfParseHead||'')}</div></div>
+          <div><div class="small-muted">pdf.js head</div><div class="codeblock mono">${esc(smp.pdfjsHead||'')}</div></div>
+          <div><div class="small-muted">OCR 1-й стр.</div><div class="codeblock mono">${esc(smp.ocrFirstPage||'—')}</div></div>
+        </div>
+      </details>
+      <details style="margin-top:8px">
+        <summary>Превью слитого JPEG (data URL head)</summary>
+        <div class="codeblock mono" style="margin-top:6px">${esc(smp.mergedJpegDataUrlHead||'—')}</div>
+      </details>
+    `;
+  }catch(e){
+    stPreview.textContent = 'Ошибка';
+    outPreview.innerHTML = `<div class="codeblock mono" style="color:var(--danger)">${esc(e.message||e)}</div>`;
+  }
+}
+
+function renderVerify(js){
+  const rst  = js.result || {};
+  const dbg  = js.debug || {};
+  const v    = rst.verdict || {};
+  const chks = Array.isArray(rst.checks)? rst.checks : [];
+  const flds = rst.fieldsExtracted || {};
+
+  const summaryPill = v.status ? pill(v.status, v.status.toUpperCase()) : '';
+  const checksHtml = chks.length
+    ? chks.map(c => pill(c.passed ? 'pass' : 'fail', `${esc(c.title||c.key||'check')}`)).join('')
+    : '<span class="small-muted">Нет проверок</span>';
+
+  const fieldsRows = Object.keys(flds).length
+    ? Object.entries(flds).map(([k,v])=> `<tr><th>${esc(k)}</th><td>${esc(typeof v==='string'?v:JSON.stringify(v))}</td></tr>`).join('')
+    : `<tr><td colspan="2" class="small-muted">Поля не извлечены</td></tr>`;
+
+  const debugBlock = Object.keys(dbg).length ? `
+    <details style="margin-top:8px">
+      <summary>Debug-метрики</summary>
+      <div class="kv" style="margin-top:6px">
+        <div class="muted">pdfParseLen</div><div>${dbg.pdfParseLen??0}</div>
+        <div class="muted">pdfjsLen</div><div>${dbg.pdfjsLen??0}</div>
+        <div class="muted">ocrTextLen</div><div>${dbg.ocrTextLen??0}</div>
+        <div class="muted">pagesRendered</div><div>${dbg.pagesRendered??0}</div>
+        <div class="muted">mergedJpegBytes</div><div>${humanBytes(dbg.mergedJpegBytes||0)}</div>
+        <div class="muted">ocrQuality</div><div>${esc(rst.ocrQuality||'')}</div>
+      </div>
+      <div class="small-muted" style="margin-top:6px">rulesUsed:</div>
+      <div class="codeblock mono">${esc(JSON.stringify(dbg.rulesUsed||{}, null, 2))}</div>
+      ${dbg.ocrTextHead ? `
+        <div class="small-muted" style="margin-top:6px">ocrText head:</div>
+        <div class="codeblock mono">${esc(dbg.ocrTextHead)}</div>` : ''
+      }
+    </details>` : '';
+
+  outVerify.innerHTML = `
+    <div class="row-gap">
+      <div><span class="muted">Вердикт:</span> ${summaryPill} ${esc(v.summary||'')}</div>
+      <div><span class="muted">Проверки:</span> <div class="inline-flex" style="margin-top:4px">${checksHtml}</div></div>
+      <div style="margin-top:8px">
+        <div class="muted">Извлечённые поля</div>
+        <table class="table" style="margin-top:6px">
+          <tbody>${fieldsRows}</tbody>
+        </table>
+      </div>
+      <details style="margin-top:8px">
+        <summary>Полный JSON</summary>
+        <div class="codeblock mono" style="margin-top:6px">${esc(JSON.stringify(js, null, 2))}</div>
+      </details>
+      ${debugBlock}
+    </div>
+  `;
+}
+
+async function runVerify(fd){
+  stVerify.textContent = 'Проверяю документ…';
+  outVerify.innerHTML = '';
+  try{
+    if($("#debugInVerify").checked){ fd.append('debug','1'); fd.append('debug_full','1'); }
+    const r = await fetch('/api/verify-document', { method:'POST', body: fd });
+    const js = await r.json();
+    if(!r.ok){ throw new Error(js?.error||('HTTP '+r.status)); }
+    stVerify.textContent = 'Готово.';
+    renderVerify(js);
+  }catch(e){
+    stVerify.textContent = 'Ошибка';
+    outVerify.innerHTML = `<div class="codeblock mono" style="color:var(--danger)">${esc(e.message||e)}</div>`;
+  }
+}
+
+$("#btnRun").onclick = async ()=>{
+  const files = $("#fileInput").files;
+  if(!files || !files.length){ alert('Выберите файл(ы)'); return; }
+  const fdPreview = new FormData();
+  const fdVerify  = new FormData();
+
+  // Общие поля
+  const docType = $("#docType").value || '';
+  const citizenship = $("#citizenship").value || '';
+  const pathName = $("#pathName").value || '';
+  const applicationDate = $("#applicationDate").value || '';
+
+  // Preview: только PDF (если выбран)
+  const wantPreview = $("#wantPreview").checked;
+  if(wantPreview){
+    const pdf = Array.from(files).find(f=>f.type==='application/pdf');
+    if(pdf){
+      fdPreview.append('file', pdf, pdf.name);
+      await runPreview(fdPreview);
+    } else {
+      stPreview.textContent = 'Пропущено (нет PDF, загружены изображения).';
+      outPreview.innerHTML = '';
+    }
+  } else {
+    stPreview.textContent = 'Пропущено по настройке.';
+    outPreview.innerHTML = '';
+  }
+
+  // Verify: принимает 1 PDF или до 20 изображений
+  for(const f of files){ fdVerify.append('file', f, f.name); }
+  if(docType) fdVerify.append('docType', docType);
+  if(citizenship) fdVerify.append('citizenship', citizenship);
+  if(pathName) fdVerify.append('path', pathName);
+  if(applicationDate) fdVerify.append('applicationDate', applicationDate);
+  await runVerify(fdVerify);
+};
+
+loadDocTypes();
+</script>
+</body>
+</html>
