@@ -10,20 +10,26 @@ import OpenAI from "openai";
 
 export const config = { runtime: "nodejs", api: { bodyParser: false } };
 
-// ── pdfjs worker (file:// URL, надёжно в serverless)
+// pdfjs worker (file:// URL)
 const require = createRequire(import.meta.url);
 pdfjsLib.GlobalWorkerOptions.workerSrc = pathToFileURL(
   require.resolve("pdfjs-dist/legacy/build/pdf.worker.mjs")
 ).href;
 
-// ── utils
+// --- utils
 const head = (s, n = 400) => (s || "").slice(0, n);
-const toU8 = (x) =>
-  x instanceof Uint8Array ? new Uint8Array(x.buffer, x.byteOffset, x.byteLength)
-  : Buffer.isBuffer(x)    ? new Uint8Array(x.buffer, x.byteOffset, x.byteLength)
-  : x instanceof ArrayBuffer ? new Uint8Array(x)
-  : new Uint8Array(x);
-
+function copyU8(view) {
+  const out = new Uint8Array(view.byteLength);
+  out.set(view instanceof Uint8Array ? view : new Uint8Array(view));
+  return out;
+}
+function toU8(x) {
+  if (!x) return new Uint8Array();
+  if (Buffer.isBuffer(x)) return copyU8(x);
+  if (x instanceof Uint8Array) return copyU8(x);
+  if (x instanceof ArrayBuffer) return copyU8(new Uint8Array(x));
+  return copyU8(new Uint8Array(x));
+}
 function getApiKey() {
   return (
     process.env.OPENAI_API_KEY ||
@@ -39,7 +45,7 @@ const looksLikeRefusal = (s = "") =>
     s
   );
 
-// ── form
+// --- form
 async function parseForm(req) {
   const form = formidable({
     multiples: false,
@@ -54,7 +60,7 @@ async function parseForm(req) {
   });
 }
 
-// ── text extraction
+// --- text extraction
 async function tryPdfParse(buf) {
   try {
     const mod = await import("pdf-parse");
@@ -65,7 +71,6 @@ async function tryPdfParse(buf) {
     return "";
   }
 }
-
 async function pdfjsText(u8, maxPages = 10) {
   const doc = await pdfjsLib.getDocument({ data: toU8(u8) }).promise;
   const pages = Math.min(doc.numPages, maxPages);
@@ -78,7 +83,7 @@ async function pdfjsText(u8, maxPages = 10) {
   return { text: all.trim(), pagesTried: pages, totalPages: doc.numPages };
 }
 
-// ── page render
+// --- render
 async function renderPages(u8, maxPages = 5, scale = 2.0) {
   const doc = await pdfjsLib.getDocument({ data: toU8(u8) }).promise;
   const pages = Math.min(doc.numPages, maxPages);
@@ -95,7 +100,7 @@ async function renderPages(u8, maxPages = 5, scale = 2.0) {
     pngs.push(canvas.toBuffer("image/png"));
   }
   if (!pngs.length) return { merged: null, count: 0 };
-  // Склейка вертикально через sharp (надёжно в serverless)
+
   const metas = await Promise.all(pngs.map((b) => sharp(b).metadata()));
   const width = Math.max(...metas.map((m) => m.width || 1));
   let totalH = 0;
@@ -112,7 +117,7 @@ async function renderPages(u8, maxPages = 5, scale = 2.0) {
   return { merged: await sharp(merged).rotate().jpeg({ quality: 85 }).toBuffer(), count: pngs.length };
 }
 
-// ── optional OCR (first page) to verify Vision pipeline
+// --- optional OCR first page
 async function ocrFirstPage(pngBuf, client) {
   const sys =
     "You are an OCR engine. Return the visible text as plain UTF-8 text. No summaries, no warnings. Output text only.";
@@ -133,7 +138,7 @@ async function ocrFirstPage(pngBuf, client) {
   return looksLikeRefusal(out) ? "" : out;
 }
 
-// ── handler
+// --- handler
 export default async function handler(req, res) {
   if (req.method !== "POST") {
     res.status(405).json({ error: "Method not allowed" });
@@ -155,19 +160,13 @@ export default async function handler(req, res) {
 
     const buf = await fsp.readFile(fileRec.filepath).finally(() => fsp.unlink(fileRec.filepath).catch(() => {}));
 
-    // A) «Живой» текст
     const viaParse = await tryPdfParse(buf);
-
-    // B) Текст через pdf.js
     const viaPdfjs = await pdfjsText(buf, 10);
-
-    // C) Рендер страниц и склейка
     const render = await renderPages(buf, 3, 2.0);
 
-    // D) Опционально: OCR первой страницы (быстро и дёшево проверить Vision-пайплайн)
     let ocrHead = null;
     if (doOCR && render.merged) {
-      // выделяем только первый PNG: рендерим ещё раз первую страницу
+      // перерендерим только 1-ю страницу
       const doc = await pdfjsLib.getDocument({ data: toU8(buf) }).promise;
       const p1 = await doc.getPage(1);
       const vp = p1.getViewport({ scale: 2.0 });
