@@ -127,7 +127,6 @@ function estimateOcrQuality(text){
 }
 
 function stripDiacritics(s=''){
-  // минимальная нормализация для сравнения ключевых слов
   return s.normalize('NFD').replace(/[\u0300-\u036f]/g,'');
 }
 
@@ -173,17 +172,11 @@ function daysBetween(a, b){
 function parseAmountToNumber(s=''){
   if(typeof s !== 'string') s = String(s ?? '');
   let t = s.trim();
-  // detect parentheses negative
   let negative = /^\(.*\)$/.test(t);
   t = t.replace(/^\((.*)\)$/, '$1');
-  // normalize dashes to minus
   t = t.replace(/[–—−]/g, '-');
-  // drop currency and spaces
   t = t.replace(/\s+/g,'').replace(/pln|zł|zl/ig,'');
-  // allow single leading minus
-  // replace comma with dot
   t = t.replace(',', '.');
-  // keep only first minus if any
   const m = t.match(/^-?\d+(\.\d+)?/);
   let num = m ? parseFloat(m[0]) : NaN;
   if(isNaN(num)) return null;
@@ -203,16 +196,12 @@ function detectPurposeByKeywords(title='', recipient='', fees){
 }
 
 function resolvePurpose(pathName='', detectedPurpose='', title='', recipient='', fees){
-  // 1) path override
   const ov = fees?.path_overrides || {};
   const keyFromPath = ov[pathName] || ov[(pathName||'').toLowerCase()];
   if(keyFromPath) return keyFromPath;
-  // 2) detected by LLM
   if(detectedPurpose) return detectedPurpose;
-  // 3) keywords
   const byKw = detectPurposeByKeywords(title, recipient, fees);
   if(byKw) return byKw;
-  // 4) default
   return 'temporary_residence_general';
 }
 
@@ -267,48 +256,56 @@ async function callLLM({ messages }){
   return json;
 }
 
-// post-fix for oplata_skarbowa: compute payment_date_recent deterministically
+// === пост-валидации для opłata skarbowa ===
+
+// 1) «Платёж свежий»: ровно один чек, приоритет applicationDate, иначе — сегодня.
 function enforcePaymentRecency(result, applicationDate){
   try{
     if(!result || (result.docType!=='oplata_skarbowa' && result.docType!=='opłata_skarbowa')) return;
 
     const fields = result.fieldsExtracted || {};
     const paymentStr = fields.payment_date || fields.paymentDate || '';
-    const appStr = applicationDate || '';
+    const refDate = parsePLDate(applicationDate) || new Date(); // ← приоритет дате подачи
+    const usedRefLabel = parsePLDate(applicationDate) ? 'applicationDate' : 'today';
+
+    // дедуп: вычищаем любые существующие варианты этого чека от LLM
+    const RECENCY_KEYS = new Set(['payment_date_recent','payment_recent','payment_recency','payment_fresh']);
+    const checks = Array.isArray(result.checks) ? result.checks.filter(c=>{
+      if(!c) return false;
+      if(RECENCY_KEYS.has(c.key)) return false;
+      if(typeof c.title==='string' && /плат[её]ж.*свеж/i.test(c.title)) return false;
+      return true;
+    }) : [];
+
+    // создаём нормализованный чек
+    const chk = { key: 'payment_date_recent', title: 'Платёж свежий', required: false };
+
     const payment = parsePLDate(paymentStr);
-    const ref = parsePLDate(appStr) || new Date(); // если дата подачи не передана — сегодня
-    const checks = Array.isArray(result.checks) ? result.checks : [];
-
-    let chk = checks.find(c => c && c.key === 'payment_date_recent');
-    if(!chk){
-      chk = { key: 'payment_date_recent', title: 'Платёж свежий', required: false };
-      checks.push(chk);
-      result.checks = checks;
-    }
-
     if(!payment){
       chk.passed = false;
       chk.details = 'Не удалось разобрать дату платежа (ожидается DD.MM.YYYY или YYYY-MM-DD).';
-      return;
+    } else {
+      const diff = daysBetween(refDate, payment); // ref - payment
+      const inFuture = diff < 0;
+      const within60 = diff <= 60;
+      chk.passed = !inFuture && within60;
+      chk.details = `payment_date=${paymentStr} ⇒ ${payment.toISOString().slice(0,10)}, ref(${usedRefLabel})=${refDate.toISOString().slice(0,10)}, diffDays=${diff}, threshold=60`;
     }
 
-    const diff = daysBetween(ref, payment); // ref - payment
-    const inFuture = diff < 0;
-    const within60 = diff <= 60;
-
-    chk.passed = !inFuture && within60;
-    chk.details = `payment_date=${paymentStr} ⇒ ${payment.toISOString().slice(0,10)}, reference=${ref.toISOString().slice(0,10)}, diffDays=${diff}, threshold=60`;
+    checks.push(chk);
+    result.checks = checks;
   }catch(e){
     // не падаем
   }
 }
 
-// post-fix for oplata_skarbowa: compute amount_correct deterministically
+// 2) «Сумма соответствует цели»: детерминированно, по fees.json
 function enforceFeeAmount(result, applicationDate, pathName, fees){
   try{
     if(!result || (result.docType!=='oplata_skarbowa' && result.docType!=='opłata_skarbowa')) return;
 
     const fields = result.fieldsExtracted = result.fieldsExtracted || {};
+    // возможная дедупликация на будущее
     const checks = Array.isArray(result.checks) ? result.checks : (result.checks = []);
 
     let amountStr = fields.amount || fields.amount_raw || '';
