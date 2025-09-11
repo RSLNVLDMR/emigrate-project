@@ -11,7 +11,7 @@
 <div class="screen">
   <div class="container">
     <div class="header">
-      <div class="h1">Подтверждение адреса</div>
+      <div class="h1" data-i18n="address_title">Подтверждение адреса</div>
       <div class="lang">
         <button data-lang="ru" class="active">RU</button>
         <button data-lang="ua">UA</button>
@@ -19,68 +19,44 @@
       </div>
     </div>
 
-    <!-- Общее описание -->
+    <!-- Описание модуля -->
     <div class="card">
-      <div class="h2">Зачем это нужно</div>
-      <div class="p muted">
-        Этот модуль помогает подготовить и проверить документ, подтверждающий адрес проживания
+      <div class="p muted" data-i18n="address_description">
+        Помогает подготовить и проверить документ, подтверждающий адрес проживания
         в Польше (договор аренды, мелдунек, подтверждение собственника и т.п.).
       </div>
     </div>
 
     <!-- Как оформить (плейсхолдеры сценариев) -->
     <div class="card" style="margin-top:12px">
-      <div class="h2">Как оформить</div>
-      <div class="p muted">Дальше здесь будут разные сценарии оформления в зависимости от вашей ситуации:</div>
+      <div class="h2" data-i18n="address_how_to_apply">Какой документ подойдет</div>
+      <div class="p muted" data-i18n="address_scenarios_desc">Дальше здесь будут разные сценарии оформления в зависимости от вашей ситуации:</div>
       <ul class="p muted" style="margin-top:4px">
-        <li>У вас <b>обычный договор аренды</b></li>
-        <li>У вас <b>умова найму оказионального</b></li>
-        <li>Нужно получить <b>мелдунек</b></li>
-        <li>Вы — <b>владелец жилья</b></li>
-        <li>Сейчас <b>нет легального жилья</b> — временные варианты</li>
+        <li data-i18n="address_scenario_1">У вас <b>обычный договор аренды</b></li>
+        <li data-i18n="address_scenario_2">У вас <b>умова найму оказионального</b></li>
+        <li data-i18n="address_scenario_3">У вас есть <b>мельдунек</b></li>
+        <li data-i18n="address_scenario_4">Вы — <b>владелец жилья</b></li>
+        <li data-i18n="address_scenario_5">Если у вас <b>нет легального жилья</b> — <b>Свяжитесь с консультантом</b> — мы сможем помочь</li>
       </ul>
-      <div class="p muted">Сценарий подберём по ответам анкеты; пока здесь — заглушка.</div>
     </div>
 
-    <!-- Загрузка и проверка -->
+    <!-- Проверка документа с AI -->
     <div class="card" style="margin-top:12px">
-      <div class="h2">У меня уже есть документ</div>
+      <div class="h2" data-i18n="address_ai_check_title">🤖 Проверка документа с AI</div>
+      <div class="p muted" data-i18n="address_ai_check_desc">
+        Наш AI-помощник поможет проверить ваш документ, подтверждающий адрес проживания.
+      </div>
 
       <div class="col" style="gap:10px">
-        <div class="row" style="gap:8px;flex-wrap:wrap">
-          <label class="muted">Тип документа:</label>
-          <select id="docType" class="input" style="max-width:320px">
-            <option value="lease_standard">Договор аренды (обычный)</option>
-            <option value="lease_okazjonalna">Договор аренды (okazjonalna)</option>
-            <option value="meldunek">Мелдунек (zaświadczenie o zameldowaniu)</option>
-            <option value="owner">Вы — собственник</option>
-            <option value="other">Другое</option>
-          </select>
-        </div>
-
-        <!-- Кастомная кнопка выбора файла + скрытый input -->
+        <!-- Кнопка проверки с AI -->
         <div class="row" style="gap:8px;align-items:flex-start;flex-wrap:wrap">
-          <input id="file" type="file" accept="image/*,application/pdf" class="hidden" />
-          <button id="pickFileBtn" class="btn secondary">Выбрать файл</button>
-          <button id="checkBtn" class="btn">Проверить</button>
-          <button id="rushBtn" class="btn secondary" disabled>Ускорить (5 мин)</button>
+          <button id="checkWithAI" class="btn btn-primary" data-i18n="address_check_with_ai">Проверить с AI</button>
         </div>
 
         <!-- Статус прогресса -->
         <div id="statusRow" class="row" style="gap:8px;align-items:center;display:none">
           <span id="statusDot" style="width:10px;height:10px;border-radius:50%;background:var(--muted);display:inline-block"></span>
           <span id="statusText" class="muted"></span>
-        </div>
-
-        <!-- Превью файла -->
-        <div id="fileInfo" class="card" style="display:none;background:transparent;border-style:dashed">
-          <div class="row" style="justify-content:space-between;align-items:center">
-            <div class="col" style="gap:2px">
-              <div id="fileName" class="p"></div>
-              <small id="fileMeta" class="muted"></small>
-            </div>
-            <button id="removeFile" class="btn secondary">Удалить</button>
-          </div>
         </div>
       </div>
     </div>
@@ -122,8 +98,9 @@
 <script src="./pdf-client-fallback.js" defer></script>
 
 <script>
-(function(){
-  const $ = (s,r=document)=>r.querySelector(s);
+  (function(){
+    const $ = (s,r=document)=>r.querySelector(s);
+    const $$ = (s,r=document)=>r.querySelectorAll(s);
 
   // ===== helper =====
   function fmtBytes(n){
@@ -197,87 +174,12 @@
     statusRow.style.display = text ? "flex" : "none";
   }
 
-  // ===== upload state =====
-  let chosenFile = null;
-  const fileInput = $("#file");
-  const fileInfo = $("#fileInfo");
-  const fileName = $("#fileName");
-  const fileMeta = $("#fileMeta");
-
-  $("#pickFileBtn").onclick = ()=> fileInput.click();
-
-  fileInput.onchange = () => {
-    const f = fileInput.files && fileInput.files[0];
-    chosenFile = f || null;
-    if (chosenFile){
-      fileInfo.style.display = "block";
-      fileName.textContent = chosenFile.name || "Файл";
-      fileMeta.textContent = `${chosenFile.type || "—"} · ${fmtBytes(chosenFile.size||0)}`;
-      setStatus("warn","Файл выбран — можно запустить проверку.");
-    } else {
-      fileInfo.style.display = "none";
-      fileName.textContent = ""; fileMeta.textContent = "";
-      setStatus(null,"");
-      $("#resultCard").style.display = "none";
-    }
-  };
-  $("#removeFile").onclick = () => {
-    chosenFile = null;
-    fileInput.value = "";
-    fileInfo.style.display = "none";
-    setStatus(null,"");
-    $("#resultCard").style.display = "none";
+  // ===== AI check button =====
+  $("#checkWithAI").onclick = () => {
+    // Заглушка для AI проверки
+    alert('Функция проверки документа с AI будет доступна в ближайшее время!');
   };
 
-  // ===== check =====
-  $("#checkBtn").onclick = async ()=>{
-    // берём файл из клиентского PDF-фоллбэка (PNG для PDF) либо исходный
-    const uploadFile = (window.emgrGetUploadFile && window.emgrGetUploadFile()) || chosenFile;
-
-    if(!uploadFile){
-      alert("Сначала загрузите файл.");
-      return;
-    }
-    const docType = $("#docType").value || "other";
-    const fd = new FormData();
-    fd.append("docType", docType);
-    fd.append("file", uploadFile, uploadFile.name || "document");
-
-    $("#checkBtn").disabled = true;
-    setStatus("checking","Проверяем…");
-
-    try{
-      const res = await fetch("/api/verify-address", { method:"POST", body: fd });
-      const data = await res.json();
-
-      // Результат — всегда есть
-      const msg = verdictMessage(data.verdict, data.is_proof_of_address);
-      $("#resultMsg").textContent = msg;
-
-      // Ошибки — всегда показываем (или «Ошибок не найдено»)
-      renderIssues(data.errors || []);
-
-      // Извлечённые поля — человекочитаемые подписи
-      const pretty = humanFields(data.fieldsExtracted || {});
-      $("#extracted").textContent = pretty;
-
-      // сворачиваем; юзер сам раскрывает
-      const det = $("#extractedWrap");
-      det.open = false;
-      $("#extractedSummary").textContent = "Показать извлечённые поля";
-
-      $("#resultCard").style.display = "block";
-
-      if (data.verdict === "pass") setStatus("ok","Проверка пройдена");
-      else if (data.verdict === "fail") setStatus("error","Есть ошибки");
-      else setStatus("warn","Не удалось уверенно определить корректность");
-    }catch(e){
-      setStatus("error","Ошибка при проверке");
-      alert("Не удалось проверить документ. Попробуйте ещё раз.");
-    }finally{
-      $("#checkBtn").disabled = false;
-    }
-  };
 
   // переключение текста summary при раскрытии
   const det = document.getElementById("extractedWrap");
@@ -289,6 +191,65 @@
   // TG init
   const tg = window.Telegram && window.Telegram.WebApp;
   if (tg) { tg.expand(); tg.ready(); }
+
+  // ===== i18n system =====
+  let i18n = {
+    lang: 'ru',
+    dict: {},
+    async load(lang) {
+      try {
+        const res = await fetch(`./i18n/${lang}.json`);
+        this.dict = await res.json();
+        this.lang = lang;
+        localStorage.setItem('lang', lang);
+        this.applyTexts();
+      } catch (e) {
+        console.error('Failed to load translations:', e);
+      }
+    },
+    applyTexts() {
+      $$('[data-i18n]').forEach(el => {
+        const key = el.getAttribute('data-i18n');
+        if (this.dict[key]) {
+          el.innerHTML = this.dict[key];
+        }
+      });
+      document.documentElement.setAttribute('lang', this.lang);
+    }
+  };
+
+  // Language switching
+  function bindLang() {
+    $$('.lang button').forEach(b => {
+      b.onclick = async () => {
+        $$('.lang button').forEach(x => x.classList.remove('active'));
+        b.classList.add('active');
+        await i18n.load(b.dataset.lang);
+        localStorage.setItem('lang', b.dataset.lang);
+      };
+    });
+  }
+
+
+  function highlightLang() {
+    $$('.lang button').forEach(b => b.classList.toggle('active', b.dataset.lang === i18n.lang));
+  }
+
+  // Initialize
+  async function initI18n() {
+    const savedLang = localStorage.getItem('lang') || 'ru';
+    await i18n.load(savedLang);
+    highlightLang();
+    bindLang();
+  }
+
+  // Make functions global
+  window.$ = $;
+  window.$$ = $$;
+  window.i18n = i18n;
+
+  // Initialize on load
+  document.addEventListener('DOMContentLoaded', initI18n);
 })();
 </script>
 </body>

@@ -88,32 +88,32 @@
       <div class="requirements-grid">
         <div class="requirement-item">
           <div class="requirement-text" data-i18n="photos_size">Размер фотографии</div>
-          <div class="requirement-value">35×45 мм</div>
+          <div class="requirement-value" data-i18n="photos_value_size">35×45 мм</div>
         </div>
         
         <div class="requirement-item">
           <div class="requirement-text" data-i18n="photos_background">Фон должен быть белым</div>
-          <div class="requirement-value">Белый</div>
+          <div class="requirement-value" data-i18n="photos_value_white">Белый</div>
         </div>
         
         <div class="requirement-item">
           <div class="requirement-text" data-i18n="photos_clothing">Одежда делового стиля</div>
-          <div class="requirement-value">Деловой</div>
+          <div class="requirement-value" data-i18n="photos_value_business">Деловой</div>
         </div>
         
         <div class="requirement-item">
           <div class="requirement-text" data-i18n="photos_expression">Выражение лица серьёзное</div>
-          <div class="requirement-value">Серьёзное</div>
+          <div class="requirement-value" data-i18n="photos_value_serious">Серьёзное</div>
         </div>
         
         <div class="requirement-item">
           <div class="requirement-text" data-i18n="photos_quality">Высокое качество, без размытия</div>
-          <div class="requirement-value">Качество</div>
+          <div class="requirement-value" data-i18n="photos_value_quality">Качество</div>
         </div>
         
         <div class="requirement-item">
           <div class="requirement-text" data-i18n="photos_quantity">Минимум 4 фотографии</div>
-          <div class="requirement-value">4 шт.</div>
+          <div class="requirement-value" data-i18n="photos_value_quantity">4 шт.</div>
         </div>
       </div>
     </div>
@@ -167,6 +167,7 @@
       <div class="h2" data-i18n="photos_tips">Полезные советы</div>
       <ul class="p muted" style="margin-top:8px">
         <li data-i18n="photos_tip_1">Позвоните заранее, чтобы уточнить цены и время работы</li>
+        <li data-i18n="photos_tip_2">Возьмите с собой паспорт для идентификации</li>
         <li data-i18n="photos_tip_3">Обычно фото готовы в течение 15-30 минут</li>
         <li data-i18n="photos_tip_4">Стоимость: 20-50 злотых за комплект</li>
         <li data-i18n="photos_tip_5">Можно сделать фото в торговых центрах</li>
@@ -282,7 +283,7 @@
     const studiosList = $('#studiosList');
     
     if (studios.length === 0) {
-      studiosList.innerHTML = '<div class="p muted">Фотоателье в этом городе не найдены</div>';
+      studiosList.innerHTML = `<div class="p muted">${i18n.dict.photos_no_studios || 'Фотоателье в этом городе не найдены'}</div>`;
     } else {
       studiosList.innerHTML = '';
       studios.forEach(studio => {
