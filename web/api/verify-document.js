@@ -145,14 +145,12 @@ async function loadRules(){
 function parsePLDate(s){
   if(!s || typeof s!=='string') return null;
   const t = s.trim();
-  // ISO yyyy-mm-dd / yyyy.mm.dd / yyyy/mm/dd
   let m = t.match(/^(\d{4})[.\-/](\d{2})[.\-/](\d{2})$/);
   if(m){
     const [_,Y,Mo,D] = m;
     const d = new Date(Number(Y), Number(Mo)-1, Number(D));
     return isNaN(d) ? null : d;
   }
-  // dd.mm.yyyy / dd-mm-yyyy / dd/mm/yyyy
   m = t.match(/^(\d{1,2})[.\-/](\d{1,2})[.\-/](\d{4})$/);
   if(m){
     const [_,D,Mo,Y] = m;
@@ -258,17 +256,16 @@ async function callLLM({ messages }){
 
 // === пост-валидации для opłata skarbowa ===
 
-// 1) «Платёж свежий»: ровно один чек, приоритет applicationDate, иначе — сегодня.
+// 1) «Платёж свежий»: один чек, приоритет applicationDate, иначе — сегодня.
 function enforcePaymentRecency(result, applicationDate){
   try{
     if(!result || (result.docType!=='oplata_skarbowa' && result.docType!=='opłata_skarbowa')) return;
 
     const fields = result.fieldsExtracted || {};
     const paymentStr = fields.payment_date || fields.paymentDate || '';
-    const refDate = parsePLDate(applicationDate) || new Date(); // ← приоритет дате подачи
+    const refDate = parsePLDate(applicationDate) || new Date();
     const usedRefLabel = parsePLDate(applicationDate) ? 'applicationDate' : 'today';
 
-    // дедуп: вычищаем любые существующие варианты этого чека от LLM
     const RECENCY_KEYS = new Set(['payment_date_recent','payment_recent','payment_recency','payment_fresh']);
     const checks = Array.isArray(result.checks) ? result.checks.filter(c=>{
       if(!c) return false;
@@ -277,7 +274,6 @@ function enforcePaymentRecency(result, applicationDate){
       return true;
     }) : [];
 
-    // создаём нормализованный чек
     const chk = { key: 'payment_date_recent', title: 'Платёж свежий', required: false };
 
     const payment = parsePLDate(paymentStr);
@@ -285,7 +281,7 @@ function enforcePaymentRecency(result, applicationDate){
       chk.passed = false;
       chk.details = 'Не удалось разобрать дату платежа (ожидается DD.MM.YYYY или YYYY-MM-DD).';
     } else {
-      const diff = daysBetween(refDate, payment); // ref - payment
+      const diff = daysBetween(refDate, payment);
       const inFuture = diff < 0;
       const within60 = diff <= 60;
       chk.passed = !inFuture && within60;
@@ -294,19 +290,31 @@ function enforcePaymentRecency(result, applicationDate){
 
     checks.push(chk);
     result.checks = checks;
-  }catch(e){
-    // не падаем
-  }
+  }catch(e){}
 }
 
-// 2) «Сумма соответствует цели»: детерминированно, по fees.json
+// 2) «Сумма соответствует цели»: один чек, детерминированно, по fees.json
 function enforceFeeAmount(result, applicationDate, pathName, fees){
   try{
     if(!result || (result.docType!=='oplata_skarbowa' && result.docType!=='opłata_skarbowa')) return;
 
     const fields = result.fieldsExtracted = result.fieldsExtracted || {};
-    const checks = Array.isArray(result.checks) ? result.checks : (result.checks = []);
+    let checks = Array.isArray(result.checks) ? result.checks : (result.checks = []);
 
+    // дедуп: вычищаем все возможные LLM-варианты про сумму
+    const AMOUNT_KEYS = new Set(['amount_correct','fee_amount_correct','amount_ok','kwota_poprawna','suma_zgodna']);
+    checks = checks.filter(c=>{
+      if(!c) return false;
+      if(AMOUNT_KEYS.has(c.key)) return false;
+      if(typeof c.title==='string' && /сумм[аы].*соответ/i.test(c.title)) return false;
+      if(typeof c.title==='string' && /(kwota|suma).*(zgodna|poprawna)/i.test(c.title)) return false;
+      if(typeof c.title==='string' && /amount.*(match|correct)/i.test(c.title)) return false;
+      return true;
+    });
+
+    result.checks = checks; // применяем отфильтрованный список
+
+    // парс суммы
     let amountStr = fields.amount || fields.amount_raw || '';
     let amountVal = fields.amount_value;
     if (amountVal == null) {
@@ -327,29 +335,23 @@ function enforceFeeAmount(result, applicationDate, pathName, fees){
     fields.detected_purpose = purpose;
     fields.expected_amount = expected;
 
-    let chk = checks.find(c => c && c.key === 'amount_correct');
-    if(!chk){
-      chk = { key: 'amount_correct', title: 'Сумма соответствует цели', required: true };
-      checks.push(chk);
-    }
+    const chk = { key: 'amount_correct', title: 'Сумма соответствует цели', required: true };
 
     if (amountVal == null || expected == null){
       chk.passed = false;
       chk.details = `Недостаточно данных для проверки суммы: amount=${amountVal}, expected=${expected}, purpose=${purpose}`;
-      return;
+    } else {
+      const delta = Math.abs(amountVal - expected);
+      fields.amount_delta = delta;
+      chk.passed = delta <= tolerance;
+      chk.details = `amount=${amountVal} PLN, expected=${expected} PLN (purpose=${purpose}), tolerance=±${tolerance}, delta=${delta}`;
     }
 
-    const delta = Math.abs(amountVal - expected);
-    fields.amount_delta = delta;
-
-    chk.passed = delta <= tolerance;
-    chk.details = `amount=${amountVal} PLN, expected=${expected} PLN (purpose=${purpose}), tolerance=±${tolerance}, delta=${delta}`;
-  }catch(e){
-    // не падаем
-  }
+    result.checks.push(chk);
+  }catch(e){}
 }
 
-// 3) Вердикт: выравниваем по фактическим чек-боксам (только для opłata skarbowa)
+// 3) Вердикт выравниваем по чек-боксам (для opłata skarbowa)
 function enforceVerdictConsistency(result){
   try{
     if(!result || (result.docType!=='oplata_skarbowa' && result.docType!=='opłata_skarbowa')) return;
@@ -370,9 +372,7 @@ function enforceVerdictConsistency(result){
           : `Есть замечания по необязательным пунктам: ${failedOpt.join(', ')}.`;
 
     result.verdict = { ...(result.verdict || {}), status, summary };
-  }catch(e){
-    // не падаем
-  }
+  }catch(e){}
 }
 
 async function processNow({ files, docType, citizenship, pathName, applicationDate, userName, wantDebug=false, wantDebugFull=false }){
@@ -388,18 +388,15 @@ async function processNow({ files, docType, citizenship, pathName, applicationDa
   if(pdfs.length===1){
     const buf = await readTmp(pdfs[0].filepath);
 
-    // 1) «Живой» текст
     let viaParse = await tryPdfParseText(buf);
     debug.pdfParseLen = viaParse.length;
 
-    // 2) pdfjs getTextContent
     let viaPdfjs = '';
     try { viaPdfjs = await pdfExtractTextViaPdfjs(buf, 20); } catch {}
     debug.pdfjsLen = viaPdfjs.length;
 
     ocrText = viaParse.length >= viaPdfjs.length ? viaParse : viaPdfjs;
 
-    // 3) JPEG из первых 10 страниц
     try{
       const { pngs, pages } = await renderPdfPages(buf, 10, 2.0);
       debug.pagesRendered = pages;
