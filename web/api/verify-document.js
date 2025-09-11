@@ -26,12 +26,24 @@ function envApiKey() {
 }
 const openai = new OpenAI({ apiKey: envApiKey() });
 
+// pdfjs worker
 pdfjsLib.GlobalWorkerOptions.workerSrc = pathToFileURL(
   require.resolve('pdfjs-dist/legacy/build/pdf.worker.mjs')
 ).href;
 
 // ===== helpers =====
-function toU8(buf){ return buf instanceof Uint8Array ? buf : new Uint8Array(buf); }
+function copyU8(view) {
+  const out = new Uint8Array(view.byteLength);
+  out.set(view instanceof Uint8Array ? view : new Uint8Array(view));
+  return out;
+}
+function toU8(x){ 
+  if (!x) return new Uint8Array();
+  if (Buffer.isBuffer(x)) return copyU8(x);
+  if (x instanceof Uint8Array) return copyU8(x);
+  if (x instanceof ArrayBuffer) return copyU8(new Uint8Array(x));
+  return copyU8(new Uint8Array(x));
+}
 
 async function parseForm(req){
   const form = formidable({ multiples: true, maxFileSize: 35*1024*1024, uploadDir: '/tmp', keepExtensions: true });
@@ -158,7 +170,7 @@ async function callLLM({ messages }){
   return json;
 }
 
-async function processNow({ files, docType, citizenship, pathName, applicationDate, debugObj }){
+async function processNow({ files, docType, citizenship, pathName, applicationDate }){
   const pdfs = files.filter(f=>f.mimetype==='application/pdf');
   const imgs = files.filter(f=>f.mimetype?.startsWith('image/'));
   if(pdfs.length && imgs.length) throw new Error('Upload either PDF or images, not both');
@@ -171,30 +183,23 @@ async function processNow({ files, docType, citizenship, pathName, applicationDa
     const buf = await readTmp(pdfs[0].filepath);
 
     // 1) «Живой» текст
-    let viaParse = await tryPdfParseText(buf);
-    debugObj.pdfParseLen = viaParse.length;
+    ocrText = await tryPdfParseText(buf);
 
-    // 2) pdfjs getTextContent
-    let viaPdfjs = '';
-    try { viaPdfjs = await pdfExtractTextViaPdfjs(buf, 20); } catch {}
-    debugObj.pdfjsLen = viaPdfjs.length;
-
-    ocrText = viaParse.length >= viaPdfjs.length ? viaParse : viaPdfjs;
+    // 2) pdfjs getTextContent (если полезнее)
+    if(!ocrText || ocrText.replace(/\s+/g,' ').length < 200){
+      try{
+        const t2 = await pdfExtractTextViaPdfjs(buf, 20);
+        if(t2 && t2.replace(/\s+/g,' ').length > (ocrText?.length||0)) ocrText = t2;
+      }catch{}
+    }
 
     // 3) JPEG из первых 10 страниц
     try{
-      const { pngs, pages } = await renderPdfPages(buf, 10, 2.0);
-      debugObj.pagesRendered = pages;
-      if (pngs.length) {
+      const { pngs } = await renderPdfPages(buf, 10, 2.0);
+      if(pngs.length){
         mergedJPEG = await mergeImagesVerticallySharp(pngs);
-        debugObj.mergedJpegBytes = mergedJPEG.length;
-      } else {
-        debugObj.mergedJpegBytes = 0;
       }
-    }catch(e){
-      debugObj.pagesRendered = debugObj.pagesRendered || 0;
-      debugObj.mergedJpegBytes = debugObj.mergedJpegBytes || 0;
-    }
+    }catch{}
 
   } else if(imgs.length>=1){
     const normalized = [];
@@ -203,10 +208,6 @@ async function processNow({ files, docType, citizenship, pathName, applicationDa
       normalized.push(await sharp(b).rotate().jpeg({ quality: 85 }).toBuffer());
     }
     mergedJPEG = await mergeImagesVerticallySharp(normalized);
-    debugObj.pagesRendered = imgs.length;
-    debugObj.mergedJpegBytes = mergedJPEG.length;
-    debugObj.pdfParseLen = 0;
-    debugObj.pdfjsLen = 0;
   } else {
     throw new Error('Attach 1 PDF or up to 20 images');
   }
@@ -225,9 +226,8 @@ async function processNow({ files, docType, citizenship, pathName, applicationDa
   });
 
   const result = await callLLM({ messages });
-  result.ocrQuality = result.ocrQuality || (ocrText ? 'medium' : 'poor');
+  result.ocrQuality = result.ocrQuality || estimateOcrQuality(ocrText||'');
   result.docType = result.docType || docType;
-  debugObj.ocrTextLen = (ocrText || '').length;
   return result;
 }
 
@@ -248,23 +248,15 @@ export default async function handler(req, res){
     const citizenship = String(fields.citizenship||'').trim() || '';
     const pathName = String(fields.path||'').trim() || '';
     const applicationDate = String(fields.applicationDate||'').trim() || '';
-    const debugFlag = String(fields.debug||'') === '1';
 
     if(!files.length) return bad(res, 400, 'No files');
     if(files.length>20) return bad(res, 400, 'Max 20 files');
     const total = sumSize(files);
     if(total > 30*1024*1024) return bad(res, 400, 'Total size exceeds 30MB');
 
-    const dbg = {};
-    const result = await processNow({ files, docType, citizenship, pathName, applicationDate, debugObj: dbg });
+    const result = await processNow({ files, docType, citizenship, pathName, applicationDate });
     res.setHeader('Content-Type','application/json; charset=utf-8');
-    res.end(JSON.stringify({ ok:true, result, ...(debugFlag ? { debug: {
-      pdfParseLen: dbg.pdfParseLen||0,
-      pdfjsLen: dbg.pdfjsLen||0,
-      ocrTextLen: dbg.ocrTextLen||0,
-      pagesRendered: dbg.pagesRendered||0,
-      mergedJpegBytes: dbg.mergedJpegBytes||0
-    }} : {}) }));
+    res.end(JSON.stringify({ ok:true, result }));
   }catch(e){
     bad(res, 500, e.message || 'Internal error');
   }
