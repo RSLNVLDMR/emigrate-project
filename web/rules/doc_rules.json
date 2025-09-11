@@ -79,21 +79,33 @@
     "title": "Opłata skarbowa — potwierdzenie przelewu/kwit",
     "fields": [
       { "key": "payer_name", "label": "Imię i nazwisko płatnika" },
-      { "key": "amount", "label": "Kwota" },
+      { "key": "amount", "label": "Kwota (как в документе, строка)" },
+      { "key": "amount_raw", "label": "Исходная сумма (сырая строка из OCR)", "optional": true },
+      { "key": "amount_value", "label": "Сумма как число (ABS, PLN)", "optional": true },
       { "key": "recipient", "label": "Odbiorca (Urząd Miasta/Gminy)" },
       { "key": "account_number", "label": "Nr rachunku" },
       { "key": "title", "label": "Tytuł przelewu" },
-      { "key": "payment_date", "label": "Data płatności" }
+      { "key": "payment_date", "label": "Data płatności" },
+
+      { "key": "detected_purpose", "label": "Определённая цель платежа (ключ из FEES_TABLE)", "optional": true },
+      { "key": "expected_amount", "label": "Ожидаемая сумма по FEES_TABLE (PLN)", "optional": true },
+      { "key": "amount_delta", "label": "Отклонение: abs(amount_value) - expected_amount (PLN)", "optional": true }
     ],
     "checks": [
       { "key": "file_readable", "title": "Документ читается", "required": true },
-      { "key": "names_match_user_in_title", "title": "ФИО пользователя в назначении платежа", "required": true, "logic": "normalized(title or payer_name) contains userName tokens" },
-      { "key": "amount_correct", "title": "Сумма соответствует цели", "required": true, "logic": "amount equals expected fee for path/type (use fees table)" },
-      { "key": "recipient_correct", "title": "Правильный получатель/счёт", "required": true, "logic": "recipient/account_number matches city/voivodeship mapping" },
+      { "key": "names_match_user_in_title", "title": "ФИО пользователя в назначении/плательщике", "required": true, "logic": "normalized(title or payer_name) contains userName tokens" },
+      {
+        "key": "amount_correct",
+        "title": "Сумма соответствует цели",
+        "required": true,
+        "logic": "1) Определи purpose по path_overrides или purpose_keywords (title/recipient). 2) expected_amount = FEES_TABLE.items[purpose]. 3) amount_value = abs(parsed(amount/amount_raw)); допускай запятая/точка, минус/длинное тире/скобки как знак. 4) Пройдено, если abs(amount_value - expected_amount) <= FEES_TABLE.tolerance_pln."
+      },
+      { "key": "recipient_correct", "title": "Правильный получатель/счёт", "required": true, "logic": "recipient/account_number matches city/voivodeship mapping (heur.)" },
       { "key": "payment_date_recent", "title": "Платёж свежий", "required": false }
     ],
     "advice_presets": [
-      "В тайтле укажите цель и ФИО: np. 'Opłata skarbowa – Jan Kowalski'."
+      "В назначении платежа укажите цель и ФИО: напр. «Opłata skarbowa – Jan Kowalski».",
+      "Проверьте, что платёж ушёл на счёт нужного органа."
     ]
   },
 
@@ -147,7 +159,7 @@
     "fields": [
       { "key": "tenant_name", "label": "Najemca/korzystający (imię i nazwisko)" },
       { "key": "address", "label": "Adres lokalu" },
-      { "key": "valid_to", "label": "Umowa важна до", "optional": true },
+      { "key": "valid_to", "label": "Umowa ważna до", "optional": true },
       { "key": "owner_name", "label": "Właściciel (dla oświadczenia)", "optional": true },
       { "key": "is_sublease", "label": "Podnajem/subnajem", "type": "boolean", "optional": true }
     ],
@@ -166,14 +178,14 @@
   },
 
   "work_standard": {
-    "title": "Pobyt czasowy i pracę — standard",
+    "title": "Pobyt czasowy i pracę — стандарт",
     "fields": [
       { "key": "employee_name", "label": "Pracownik (imię i nazwisko)" },
       { "key": "position", "label": "Stanowisko" },
       { "key": "salary_brutto", "label": "Wynagrodzenie brutto", "optional": true },
       { "key": "salary_netto", "label": "Wynagrodzenie netto (est.)", "optional": true },
       { "key": "hours_place", "label": "Wymiar czasu / miejsce pracy", "optional": true },
-      { "key": "zalacznik1_signed_by", "label": "Podpis w Załączniku nr 1", "optional": true }
+      { "key": "zalacznik1_signed_by", "label": "Podpis в Załączniku nr 1", "optional": true }
     ],
     "checks": [
       { "key": "file_readable", "title": "Пакет читается", "required": true },
@@ -311,46 +323,44 @@
   },
 
   "pit_37": {
-  "title": "PIT-37 (roczne zeznanie podatkowe)",
-  "fields": [
-    { "key": "year", "label": "Rok podatkowy" },
-    { "key": "taxpayer_name", "label": "Podatnik — nazwisko i imię" },
-    { "key": "taxpayer_pesel_or_nip", "label": "PESEL/NIP podatnika" },
-    { "key": "spouse_name", "label": "Małżonek — nazwisko i imię", "optional": true },
-    { "key": "spouse_pesel_or_nip", "label": "PESEL/NIP małżonka", "optional": true },
-    { "key": "filing_mode", "label": "Sposób rozliczenia (samodzielnie/wspólnie)" },
-    { "key": "tax_office", "label": "Urząd Skarbowy (final normalized value)" },
-    { "key": "tax_office_stamp", "label": "Źródłowa pieczęć/nazwa urzędu (surowy OCR)", "optional": true },
-
-    { "key": "amounts", "label": "Kwoty (przychód/dochod/podatek/nadpłata)", "type": "object" },
-    { "key": "submission_date", "label": "Data złożenia", "optional": true },
-
-    { "key": "signature_present", "label": "Podpis wykryty (boolean, heur.)", "type": "boolean", "optional": true },
-    { "key": "signature_mode", "label": "Sposób podpisu (paper_handwritten/ePUAP/qualified/authorizing_data/unknown)", "optional": true },
-    { "key": "signature_evidence", "label": "Dowody podpisu (list surowych fraz OCR)", "type": "array", "optional": true }
-  ],
-  "checks": [
-    { "key": "file_readable", "title": "Декларация читается", "required": true },
-    { "key": "has_year", "title": "Указан год", "required": true, "logic": "year is 4-digit >= 2000" },
-    { "key": "has_taxpayer_name", "title": "Найдено ФИО налогоплательщика", "required": true, "logic": "taxpayer_name not empty" },
-    { "key": "has_id_taxpayer", "title": "Указан PESEL/NIP налогоплательщика", "required": true, "logic": "matches 11 or 10 digits" },
-    { "key": "spouse_consistency", "title": "Совместное декларирование → данные супруга", "required": false, "logic": "if filing_mode joint then spouse_name and spouse_pesel_or_nip present" },
-    { "key": "names_match_user", "title": "ФИО в PIT совпадает с пользователем", "required": true, "logic": "userName tokens in taxpayer_name OR spouse_name if joint" },
-    {
-      "key": "tax_office_present",
-      "title": "Указан налоговый орган",
-      "required": false,
-      "logic": "tax_office not empty OR (tax_office_stamp contains any of ['URZĄD SKARBOWY','URZAD SKARBOWY','NACZELNIK URZĘDU SKARBOWEGO','US ']) — and if only stamp present, copy exact text into tax_office"
-    },
-    {
-      "key": "signature_check",
-      "title": "Подпись/КЭП корректны (для бумаги/электронно)",
-      "required": false,
-      "logic": "pass if (signature_mode in ['paper_handwritten','ePUAP','qualified','authorizing_data']) OR (signature_present true) OR (signature_evidence contains any of ['Urzędowe Poświadczenie Odbioru','UPO','Numer referencyjny','Podpisano profilem zaufanym','ePUAP','podpis kwalifikowany','kwalifikowany podpis elektroniczny','Podpisano danymi autoryzującymi']) ; fail if contains 'wydruk roboczy' or no evidence at all"
-    },
-    { "key": "amounts_present", "title": "Есть ключевые суммы (доход/налог/надплата)", "required": true }
-  ]
-},
+    "title": "PIT-37 (roczne zeznanie podatkowe)",
+    "fields": [
+      { "key": "year", "label": "Rok podatkowy" },
+      { "key": "taxpayer_name", "label": "Podatnik — nazwisko i imię" },
+      { "key": "taxpayer_pesel_or_nip", "label": "PESEL/NIP podatnika" },
+      { "key": "spouse_name", "label": "Małżonek — nazwisko i имię", "optional": true },
+      { "key": "spouse_pesel_or_nip", "label": "PESEL/NIP małżonka", "optional": true },
+      { "key": "filing_mode", "label": "Sposób rozliczenia (samodzielnie/wspólnie)" },
+      { "key": "tax_office", "label": "Urząd Skarbowy (final normalized value)" },
+      { "key": "tax_office_stamp", "label": "Źródłowa pieczęć/nazwa urzędu (surowy OCR)", "optional": true },
+      { "key": "amounts", "label": "Kwoty (przychód/dochod/podatek/nadpłata)", "type": "object" },
+      { "key": "submission_date", "label": "Data złożenia", "optional": true },
+      { "key": "signature_present", "label": "Podpis wykryty (boolean, heur.)", "type": "boolean", "optional": true },
+      { "key": "signature_mode", "label": "Sposób podpisu (paper_handwritten/ePUAP/qualified/authorizing_data/unknown)", "optional": true },
+      { "key": "signature_evidence", "label": "Dowody podpisu (list surowych fraz OCR)", "type": "array", "optional": true }
+    ],
+    "checks": [
+      { "key": "file_readable", "title": "Декларация читается", "required": true },
+      { "key": "has_year", "title": "Указан год", "required": true, "logic": "year is 4-digit >= 2000" },
+      { "key": "has_taxpayer_name", "title": "Найдено ФИО налогоплательщика", "required": true, "logic": "taxpayer_name not empty" },
+      { "key": "has_id_taxpayer", "title": "Указан PESEL/NIP налогоплательщика", "required": true, "logic": "matches 11 or 10 digits" },
+      { "key": "spouse_consistency", "title": "Совместное декларирование → данные супруга", "required": false, "logic": "if filing_mode joint then spouse_name and spouse_pesel_or_nip present" },
+      { "key": "names_match_user", "title": "ФИО в PIT совпадает с пользователем", "required": true, "logic": "userName tokens in taxpayer_name OR spouse_name if joint" },
+      {
+        "key": "tax_office_present",
+        "title": "Указан налоговый орган",
+        "required": false,
+        "logic": "tax_office not empty OR (tax_office_stamp contains any of ['URZĄD SKARBOWY','URZAD SKARBOWY','NACZELNIK URZĘDU SKARBOWEGO','US ']) — and if only stamp present, copy exact text into tax_office"
+      },
+      { "key": "amounts_present", "title": "Есть ключевые суммы (доход/налог/надплата)", "required": true },
+      {
+        "key": "signature_check",
+        "title": "Подпись/КЭП корректны (для бумаги/электронно)",
+        "required": false,
+        "logic": "pass if (signature_mode in ['paper_handwritten','ePUAP','qualified','authorizing_data']) OR (signature_present true) OR (signature_evidence contains any of ['Urzędowe Poświadczenie Odbioru','UPO','Numer referencyjny','Podpisano profilem zaufanym','ePUAP','podpis kwalifikowany','kwalifikowany podpis elektroniczny','Podpisano danymi autoryzującymi']); fail if contains 'wydruk roboczy' or no evidence at all"
+      }
+    ]
+  },
 
   "bank_statement": {
     "title": "Wyciąg bankowy",
