@@ -10,7 +10,6 @@ import * as pdfjsLib from 'pdfjs-dist/legacy/build/pdf.mjs';
 import { createRequire } from 'node:module';
 const require = createRequire(import.meta.url);
 
-// ── фикс рантайма: Node.js (НЕ edge)
 export const config = { runtime: 'nodejs', api: { bodyParser: false, sizeLimit: '35mb' } };
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -27,7 +26,6 @@ function envApiKey() {
 }
 const openai = new OpenAI({ apiKey: envApiKey() });
 
-// ── pdfjs worker под Node (file:// URL через pathToFileURL + require.resolve)
 pdfjsLib.GlobalWorkerOptions.workerSrc = pathToFileURL(
   require.resolve('pdfjs-dist/legacy/build/pdf.worker.mjs')
 ).href;
@@ -63,9 +61,9 @@ async function tryPdfParseText(buf){
   }catch{ return ''; }
 }
 
-async function pdfExtractTextViaPdfjs(u8){
+async function pdfExtractTextViaPdfjs(u8, limit=20){
   const doc = await pdfjsLib.getDocument({ data: toU8(u8) }).promise;
-  const pages = Math.min(doc.numPages, 20);
+  const pages = Math.min(doc.numPages, limit);
   let all = '';
   for(let i=1;i<=pages;i++){
     const page = await doc.getPage(i);
@@ -75,7 +73,6 @@ async function pdfExtractTextViaPdfjs(u8){
   return all.trim();
 }
 
-// ⬇️ Рендер страниц PDF в PNG буферы
 async function renderPdfPages(u8, maxPages=10, scale=2.0){
   const doc = await pdfjsLib.getDocument({ data: toU8(u8) }).promise;
   const pages = Math.min(doc.numPages, maxPages);
@@ -88,12 +85,10 @@ async function renderPdfPages(u8, maxPages=10, scale=2.0){
     await page.render({ canvasContext: ctx, viewport }).promise;
     out.push(canvas.toBuffer('image/png'));
   }
-  return out;
+  return { pngs: out, pages };
 }
 
-// ⬇️ Склейка вертикально ТОЛЬКО через sharp (без loadImage)
 async function mergeImagesVerticallySharp(pngBuffers){
-  // получаем размеры
   const metas = await Promise.all(pngBuffers.map(b => sharp(b).metadata()));
   const width = Math.max(...metas.map(m => m.width || 1));
   let y = 0;
@@ -103,18 +98,8 @@ async function mergeImagesVerticallySharp(pngBuffers){
     composite.push({ input: pngBuffers[i], top: y, left: 0 });
     y += h;
   }
-  // создаём пустой фон (белый)
-  const base = sharp({
-    create: {
-      width,
-      height: y,
-      channels: 3,
-      background: { r: 255, g: 255, b: 255 }
-    }
-  });
-  // композитим и нормализуем
+  const base = sharp({ create: { width, height: y, channels: 3, background: { r: 255, g: 255, b: 255 } } });
   const out = await base.composite(composite).jpeg({ quality: 85 }).toBuffer();
-  // поворот авто
   return await sharp(out).rotate().jpeg({ quality: 85 }).toBuffer();
 }
 
@@ -173,7 +158,7 @@ async function callLLM({ messages }){
   return json;
 }
 
-async function processNow({ files, docType, citizenship, pathName, applicationDate }){
+async function processNow({ files, docType, citizenship, pathName, applicationDate, debugObj }){
   const pdfs = files.filter(f=>f.mimetype==='application/pdf');
   const imgs = files.filter(f=>f.mimetype?.startsWith('image/'));
   if(pdfs.length && imgs.length) throw new Error('Upload either PDF or images, not both');
@@ -185,33 +170,43 @@ async function processNow({ files, docType, citizenship, pathName, applicationDa
   if(pdfs.length===1){
     const buf = await readTmp(pdfs[0].filepath);
 
-    // 1) «Живой» текст из PDF
-    ocrText = await tryPdfParseText(buf);
+    // 1) «Живой» текст
+    let viaParse = await tryPdfParseText(buf);
+    debugObj.pdfParseLen = viaParse.length;
 
-    // 2) Если пусто/мало — pdfjs getTextContent
-    if(!ocrText || ocrText.replace(/\s+/g,' ').length < 200){
-      try{
-        const t2 = await pdfExtractTextViaPdfjs(buf);
-        if(t2 && t2.replace(/\s+/g,' ').length > (ocrText?.length||0)) ocrText = t2;
-      }catch{}
+    // 2) pdfjs getTextContent
+    let viaPdfjs = '';
+    try { viaPdfjs = await pdfExtractTextViaPdfjs(buf, 20); } catch {}
+    debugObj.pdfjsLen = viaPdfjs.length;
+
+    ocrText = viaParse.length >= viaPdfjs.length ? viaParse : viaPdfjs;
+
+    // 3) JPEG из первых 10 страниц
+    try{
+      const { pngs, pages } = await renderPdfPages(buf, 10, 2.0);
+      debugObj.pagesRendered = pages;
+      if (pngs.length) {
+        mergedJPEG = await mergeImagesVerticallySharp(pngs);
+        debugObj.mergedJpegBytes = mergedJPEG.length;
+      } else {
+        debugObj.mergedJpegBytes = 0;
+      }
+    }catch(e){
+      debugObj.pagesRendered = debugObj.pagesRendered || 0;
+      debugObj.mergedJpegBytes = debugObj.mergedJpegBytes || 0;
     }
 
-    // 3) JPEG из первых 10 страниц — через sharp-композит (надёжнее на Vercel)
-    try{
-      const pagePngs = await renderPdfPages(buf, 10, 2.0);
-      if(pagePngs.length){
-        mergedJPEG = await mergeImagesVerticallySharp(pagePngs);
-      }
-    }catch{}
-
   } else if(imgs.length>=1){
-    // изображения → нормализуем и склеиваем
     const normalized = [];
     for(const im of imgs){
       const b = await readTmp(im.filepath);
       normalized.push(await sharp(b).rotate().jpeg({ quality: 85 }).toBuffer());
     }
     mergedJPEG = await mergeImagesVerticallySharp(normalized);
+    debugObj.pagesRendered = imgs.length;
+    debugObj.mergedJpegBytes = mergedJPEG.length;
+    debugObj.pdfParseLen = 0;
+    debugObj.pdfjsLen = 0;
   } else {
     throw new Error('Attach 1 PDF or up to 20 images');
   }
@@ -230,8 +225,9 @@ async function processNow({ files, docType, citizenship, pathName, applicationDa
   });
 
   const result = await callLLM({ messages });
-  result.ocrQuality = result.ocrQuality || estimateOcrQuality(ocrText||'');
+  result.ocrQuality = result.ocrQuality || (ocrText ? 'medium' : 'poor');
   result.docType = result.docType || docType;
+  debugObj.ocrTextLen = (ocrText || '').length;
   return result;
 }
 
@@ -252,15 +248,23 @@ export default async function handler(req, res){
     const citizenship = String(fields.citizenship||'').trim() || '';
     const pathName = String(fields.path||'').trim() || '';
     const applicationDate = String(fields.applicationDate||'').trim() || '';
+    const debugFlag = String(fields.debug||'') === '1';
 
     if(!files.length) return bad(res, 400, 'No files');
     if(files.length>20) return bad(res, 400, 'Max 20 files');
     const total = sumSize(files);
     if(total > 30*1024*1024) return bad(res, 400, 'Total size exceeds 30MB');
 
-    const result = await processNow({ files, docType, citizenship, pathName, applicationDate });
+    const dbg = {};
+    const result = await processNow({ files, docType, citizenship, pathName, applicationDate, debugObj: dbg });
     res.setHeader('Content-Type','application/json; charset=utf-8');
-    res.end(JSON.stringify({ ok:true, result }));
+    res.end(JSON.stringify({ ok:true, result, ...(debugFlag ? { debug: {
+      pdfParseLen: dbg.pdfParseLen||0,
+      pdfjsLen: dbg.pdfjsLen||0,
+      ocrTextLen: dbg.ocrTextLen||0,
+      pagesRendered: dbg.pagesRendered||0,
+      mergedJpegBytes: dbg.mergedJpegBytes||0
+    }} : {}) }));
   }catch(e){
     bad(res, 500, e.message || 'Internal error');
   }
