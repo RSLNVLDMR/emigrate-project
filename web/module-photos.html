@@ -6,6 +6,65 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <script src="https://telegram.org/js/telegram-web-app.js"></script>
   <link rel="stylesheet" href="./styles.css" />
+  <style>
+    .requirements-grid {
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: 16px;
+      margin-top: 20px;
+    }
+    
+    .requirement-item {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 16px;
+      background: var(--bg);
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      transition: all 0.2s ease;
+    }
+    
+    .requirement-item:hover {
+      border-color: var(--brand);
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+    }
+    
+    .requirement-text {
+      font-size: 16px;
+      font-weight: 500;
+      color: var(--text);
+      flex: 1;
+      margin-right: 16px;
+    }
+    
+    .requirement-value {
+      background: var(--brand);
+      color: white;
+      padding: 8px 16px;
+      border-radius: 20px;
+      font-size: 14px;
+      font-weight: 600;
+      white-space: nowrap;
+      min-width: fit-content;
+    }
+    
+    @media (max-width: 768px) {
+      .requirement-item {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 12px;
+      }
+      
+      .requirement-text {
+        margin-right: 0;
+      }
+      
+      .requirement-value {
+        align-self: flex-end;
+      }
+    }
+  </style>
 </head>
 <body>
 <div class="screen">
@@ -26,30 +85,35 @@
         Фотографии должны соответствовать строгим требованиям для документов
       </div>
       
-      <div class="col" style="gap:12px; margin-top:12px">
-        <div class="row" style="gap:8px; align-items:center">
-          <div class="badge">35×45 мм</div>
-          <span class="p" data-i18n="photos_size">Размер фотографии</span>
+      <div class="requirements-grid">
+        <div class="requirement-item">
+          <div class="requirement-text" data-i18n="photos_size">Размер фотографии</div>
+          <div class="requirement-value">35×45 мм</div>
         </div>
         
-        <div class="row" style="gap:8px; align-items:center">
-          <div class="badge">Белый</div>
-          <span class="p" data-i18n="photos_background">Фон должен быть белым</span>
+        <div class="requirement-item">
+          <div class="requirement-text" data-i18n="photos_background">Фон должен быть белым</div>
+          <div class="requirement-value">Белый</div>
         </div>
         
-        <div class="row" style="gap:8px; align-items:center">
-          <div class="badge">Деловой</div>
-          <span class="p" data-i18n="photos_clothing">Одежда делового стиля</span>
+        <div class="requirement-item">
+          <div class="requirement-text" data-i18n="photos_clothing">Одежда делового стиля</div>
+          <div class="requirement-value">Деловой</div>
         </div>
         
-        <div class="row" style="gap:8px; align-items:center">
-          <div class="badge">Серьёзное</div>
-          <span class="p" data-i18n="photos_expression">Выражение лица серьёзное</span>
+        <div class="requirement-item">
+          <div class="requirement-text" data-i18n="photos_expression">Выражение лица серьёзное</div>
+          <div class="requirement-value">Серьёзное</div>
         </div>
         
-        <div class="row" style="gap:8px; align-items:center">
-          <div class="badge">Чёткое</div>
-          <span class="p" data-i18n="photos_quality">Высокое качество, без размытия</span>
+        <div class="requirement-item">
+          <div class="requirement-text" data-i18n="photos_quality">Высокое качество, без размытия</div>
+          <div class="requirement-value">Качество</div>
+        </div>
+        
+        <div class="requirement-item">
+          <div class="requirement-text" data-i18n="photos_quantity">Минимум 4 фотографии</div>
+          <div class="requirement-value">4 шт.</div>
         </div>
       </div>
     </div>
@@ -58,7 +122,7 @@
     <div class="card" style="margin-top:12px">
       <div class="h2" data-i18n="photos_find_studio">Найти фотоателье</div>
       <div class="p muted" data-i18n="photos_find_desc">
-        Выберите город, чтобы найти ближайшие фотоателье
+        Выберите город, чтобы найти фотоателье
       </div>
       
       <div class="col" style="gap:12px; margin-top:12px">
@@ -94,7 +158,7 @@
 
     <!-- Результаты поиска -->
     <div id="resultsCard" class="card" style="margin-top:12px; display:none">
-      <div class="h2" data-i18n="photos_nearby_studios">Ближайшие фотоателье</div>
+      <div class="h2" data-i18n="photos_nearby_studios">Фотоателье</div>
       <div id="studiosList" class="col" style="gap:12px; margin-top:12px"></div>
     </div>
 
@@ -103,7 +167,6 @@
       <div class="h2" data-i18n="photos_tips">Полезные советы</div>
       <ul class="p muted" style="margin-top:8px">
         <li data-i18n="photos_tip_1">Позвоните заранее, чтобы уточнить цены и время работы</li>
-        <li data-i18n="photos_tip_2">Возьмите с собой паспорт для идентификации</li>
         <li data-i18n="photos_tip_3">Обычно фото готовы в течение 15-30 минут</li>
         <li data-i18n="photos_tip_4">Стоимость: 20-50 злотых за комплект</li>
         <li data-i18n="photos_tip_5">Можно сделать фото в торговых центрах</li>
