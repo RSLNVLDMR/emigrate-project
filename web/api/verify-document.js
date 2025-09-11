@@ -305,7 +305,6 @@ function enforceFeeAmount(result, applicationDate, pathName, fees){
     if(!result || (result.docType!=='oplata_skarbowa' && result.docType!=='opłata_skarbowa')) return;
 
     const fields = result.fieldsExtracted = result.fieldsExtracted || {};
-    // возможная дедупликация на будущее
     const checks = Array.isArray(result.checks) ? result.checks : (result.checks = []);
 
     let amountStr = fields.amount || fields.amount_raw || '';
@@ -345,6 +344,32 @@ function enforceFeeAmount(result, applicationDate, pathName, fees){
 
     chk.passed = delta <= tolerance;
     chk.details = `amount=${amountVal} PLN, expected=${expected} PLN (purpose=${purpose}), tolerance=±${tolerance}, delta=${delta}`;
+  }catch(e){
+    // не падаем
+  }
+}
+
+// 3) Вердикт: выравниваем по фактическим чек-боксам (только для opłata skarbowa)
+function enforceVerdictConsistency(result){
+  try{
+    if(!result || (result.docType!=='oplata_skarbowa' && result.docType!=='opłata_skarbowa')) return;
+
+    const checks = Array.isArray(result.checks) ? result.checks : [];
+    const failedReq = checks.filter(c => c && c.required && c.passed === false).map(c => c.title || c.key);
+    const failedOpt = checks.filter(c => c && !c.required && c.passed === false).map(c => c.title || c.key);
+
+    let status = 'pass';
+    if (failedReq.length) status = 'fail';
+    else if (failedOpt.length) status = 'uncertain';
+
+    const summary =
+      status === 'pass'
+        ? 'Все обязательные проверки пройдены.'
+        : status === 'fail'
+          ? `Провалены обязательные проверки: ${failedReq.join(', ')}.`
+          : `Есть замечания по необязательным пунктам: ${failedOpt.join(', ')}.`;
+
+    result.verdict = { ...(result.verdict || {}), status, summary };
   }catch(e){
     // не падаем
   }
@@ -425,17 +450,19 @@ async function processNow({ files, docType, citizenship, pathName, applicationDa
   // === детерминированные поправки для opłata skarbowa ===
   enforcePaymentRecency(result, applicationDate);
   enforceFeeAmount(result, applicationDate, pathName, fees);
+  enforceVerdictConsistency(result);
 
+  const debugOut = { ...debug };
   if(wantDebug){
-    debug.ocrTextLen = (ocrText||'').length;
-    debug.rulesUsed  = rulesForType;
-    debug.userName   = userName || '';
+    debugOut.ocrTextLen = (ocrText||'').length;
+    debugOut.rulesUsed  = rulesForType;
+    debugOut.userName   = userName || '';
     if(wantDebugFull){
-      debug.ocrTextHead = (ocrText||'').slice(0, 2000);
+      debugOut.ocrTextHead = (ocrText||'').slice(0, 2000);
     }
   }
 
-  return { result, debug: wantDebug ? debug : undefined };
+  return { result, debug: wantDebug ? debugOut : undefined };
 }
 
 function bad(res, code, error){
