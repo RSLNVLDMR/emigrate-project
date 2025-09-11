@@ -33,8 +33,9 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = pathToFileURL(
 
 // ===== helpers =====
 function copyU8(view) {
-  const out = new Uint8Array(view.byteLength);
-  out.set(view instanceof Uint8Array ? view : new Uint8Array(view));
+  const src = view instanceof Uint8Array ? view : new Uint8Array(view);
+  const out = new Uint8Array(src.byteLength);
+  out.set(src);
   return out;
 }
 function toU8(x){ 
@@ -170,12 +171,13 @@ async function callLLM({ messages }){
   return json;
 }
 
-async function processNow({ files, docType, citizenship, pathName, applicationDate }){
+async function processNow({ files, docType, citizenship, pathName, applicationDate, wantDebug=false, wantDebugFull=false }){
   const pdfs = files.filter(f=>f.mimetype==='application/pdf');
   const imgs = files.filter(f=>f.mimetype?.startsWith('image/'));
   if(pdfs.length && imgs.length) throw new Error('Upload either PDF or images, not both');
   if(pdfs.length>1) throw new Error('Only one PDF allowed');
 
+  const debug = {};
   let ocrText = '';
   let mergedJPEG = null;
 
@@ -183,23 +185,30 @@ async function processNow({ files, docType, citizenship, pathName, applicationDa
     const buf = await readTmp(pdfs[0].filepath);
 
     // 1) «Живой» текст
-    ocrText = await tryPdfParseText(buf);
+    let viaParse = await tryPdfParseText(buf);
+    debug.pdfParseLen = viaParse.length;
 
-    // 2) pdfjs getTextContent (если полезнее)
-    if(!ocrText || ocrText.replace(/\s+/g,' ').length < 200){
-      try{
-        const t2 = await pdfExtractTextViaPdfjs(buf, 20);
-        if(t2 && t2.replace(/\s+/g,' ').length > (ocrText?.length||0)) ocrText = t2;
-      }catch{}
-    }
+    // 2) pdfjs getTextContent
+    let viaPdfjs = '';
+    try { viaPdfjs = await pdfExtractTextViaPdfjs(buf, 20); } catch {}
+    debug.pdfjsLen = viaPdfjs.length;
+
+    ocrText = viaParse.length >= viaPdfjs.length ? viaParse : viaPdfjs;
 
     // 3) JPEG из первых 10 страниц
     try{
-      const { pngs } = await renderPdfPages(buf, 10, 2.0);
-      if(pngs.length){
+      const { pngs, pages } = await renderPdfPages(buf, 10, 2.0);
+      debug.pagesRendered = pages;
+      if (pngs.length) {
         mergedJPEG = await mergeImagesVerticallySharp(pngs);
+        debug.mergedJpegBytes = mergedJPEG.length;
+      } else {
+        debug.mergedJpegBytes = 0;
       }
-    }catch{}
+    }catch(e){
+      debug.pagesRendered = debug.pagesRendered || 0;
+      debug.mergedJpegBytes = debug.mergedJpegBytes || 0;
+    }
 
   } else if(imgs.length>=1){
     const normalized = [];
@@ -208,6 +217,10 @@ async function processNow({ files, docType, citizenship, pathName, applicationDa
       normalized.push(await sharp(b).rotate().jpeg({ quality: 85 }).toBuffer());
     }
     mergedJPEG = await mergeImagesVerticallySharp(normalized);
+    debug.pagesRendered = imgs.length;
+    debug.mergedJpegBytes = mergedJPEG.length;
+    debug.pdfParseLen = 0;
+    debug.pdfjsLen = 0;
   } else {
     throw new Error('Attach 1 PDF or up to 20 images');
   }
@@ -228,7 +241,16 @@ async function processNow({ files, docType, citizenship, pathName, applicationDa
   const result = await callLLM({ messages });
   result.ocrQuality = result.ocrQuality || estimateOcrQuality(ocrText||'');
   result.docType = result.docType || docType;
-  return result;
+
+  if(wantDebug){
+    debug.ocrTextLen = (ocrText||'').length;
+    debug.rulesUsed  = rulesForType;
+    if(wantDebugFull){
+      debug.ocrTextHead = (ocrText||'').slice(0, 2000);
+    }
+  }
+
+  return { result, debug: wantDebug ? debug : undefined };
 }
 
 function bad(res, code, error){
@@ -248,15 +270,17 @@ export default async function handler(req, res){
     const citizenship = String(fields.citizenship||'').trim() || '';
     const pathName = String(fields.path||'').trim() || '';
     const applicationDate = String(fields.applicationDate||'').trim() || '';
+    const wantDebug = String(fields.debug||'')==='1';
+    const wantDebugFull = String(fields.debug_full||'')==='1';
 
     if(!files.length) return bad(res, 400, 'No files');
     if(files.length>20) return bad(res, 400, 'Max 20 files');
     const total = sumSize(files);
     if(total > 30*1024*1024) return bad(res, 400, 'Total size exceeds 30MB');
 
-    const result = await processNow({ files, docType, citizenship, pathName, applicationDate });
+    const { result, debug } = await processNow({ files, docType, citizenship, pathName, applicationDate, wantDebug, wantDebugFull });
     res.setHeader('Content-Type','application/json; charset=utf-8');
-    res.end(JSON.stringify({ ok:true, result }));
+    res.end(JSON.stringify({ ok:true, result, ...(debug ? { debug } : {}) }));
   }catch(e){
     bad(res, 500, e.message || 'Internal error');
   }
