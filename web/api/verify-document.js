@@ -38,7 +38,7 @@ function copyU8(view) {
   out.set(src);
   return out;
 }
-function toU8(x){ 
+function toU8(x){
   if (!x) return new Uint8Array();
   if (Buffer.isBuffer(x)) return copyU8(x);
   if (x instanceof Uint8Array) return copyU8(x);
@@ -126,11 +126,20 @@ function estimateOcrQuality(text){
   return 'poor';
 }
 
+function stripDiacritics(s=''){
+  // минимальная нормализация для сравнения ключевых слов
+  return s.normalize('NFD').replace(/[\u0300-\u036f]/g,'');
+}
+
 async function loadRules(){
   const basePrompt = await fsp.readFile(path.join(root, 'rules', 'prompt.base.txt'), 'utf8');
   const schema = JSON.parse(await fsp.readFile(path.join(root, 'rules', 'schema.verify.json'), 'utf8'));
   const rules = JSON.parse(await fsp.readFile(path.join(root, 'rules', 'doc_rules.json'), 'utf8'));
-  return { basePrompt, schema, rules };
+  let fees = {};
+  try {
+    fees = JSON.parse(await fsp.readFile(path.join(root, 'rules', 'context', 'fees.json'), 'utf8'));
+  } catch {}
+  return { basePrompt, schema, rules, fees };
 }
 
 // ---- date utils (deterministic) ----
@@ -144,7 +153,7 @@ function parsePLDate(s){
     const d = new Date(Number(Y), Number(Mo)-1, Number(D));
     return isNaN(d) ? null : d;
   }
-  // dd.mm.yyyy / dd-mm-yyyy / dd/mm/yyyy  (евро-формат по умолчанию)
+  // dd.mm.yyyy / dd-mm-yyyy / dd/mm/yyyy
   m = t.match(/^(\d{1,2})[.\-/](\d{1,2})[.\-/](\d{4})$/);
   if(m){
     const [_,D,Mo,Y] = m;
@@ -160,7 +169,55 @@ function daysBetween(a, b){
   return Math.floor((da - db)/MS);
 }
 
-function buildMessages({ basePrompt, schema, rulesForType, context, ocrText, mergedImageDataUrl }) {
+// ---- amount utils ----
+function parseAmountToNumber(s=''){
+  if(typeof s !== 'string') s = String(s ?? '');
+  let t = s.trim();
+  // detect parentheses negative
+  let negative = /^\(.*\)$/.test(t);
+  t = t.replace(/^\((.*)\)$/, '$1');
+  // normalize dashes to minus
+  t = t.replace(/[–—−]/g, '-');
+  // drop currency and spaces
+  t = t.replace(/\s+/g,'').replace(/pln|zł|zl/ig,'');
+  // allow single leading minus
+  // replace comma with dot
+  t = t.replace(',', '.');
+  // keep only first minus if any
+  const m = t.match(/^-?\d+(\.\d+)?/);
+  let num = m ? parseFloat(m[0]) : NaN;
+  if(isNaN(num)) return null;
+  if(negative) num = -Math.abs(num);
+  return Math.abs(num);
+}
+
+function detectPurposeByKeywords(title='', recipient='', fees){
+  const low = stripDiacritics((title+' '+recipient).toLowerCase());
+  const map = fees?.purpose_keywords || {};
+  for(const [purpose, arr] of Object.entries(map)){
+    if(arr.some(k => low.includes(stripDiacritics(k.toLowerCase())))){
+      return purpose;
+    }
+  }
+  return null;
+}
+
+function resolvePurpose(pathName='', detectedPurpose='', title='', recipient='', fees){
+  // 1) path override
+  const ov = fees?.path_overrides || {};
+  const keyFromPath = ov[pathName] || ov[(pathName||'').toLowerCase()];
+  if(keyFromPath) return keyFromPath;
+  // 2) detected by LLM
+  if(detectedPurpose) return detectedPurpose;
+  // 3) keywords
+  const byKw = detectPurposeByKeywords(title, recipient, fees);
+  if(byKw) return byKw;
+  // 4) default
+  return 'temporary_residence_general';
+}
+
+// ---- LLM messages ----
+function buildMessages({ basePrompt, schema, rulesForType, fees, context, ocrText, mergedImageDataUrl }) {
   const sys = basePrompt;
   const extractionHint =
 `К ИЗВЛЕЧЕНИЮ (если есть в документе/сканах):
@@ -181,6 +238,9 @@ Return STRICT JSON per schema. If data insufficient: set passed=false with helpf
     { type:'text', text: `SCHEMA:\n${JSON.stringify(schema)}` },
     { type:'text', text: `CHECKLIST FOR TYPE:\n${JSON.stringify(rulesForType, null, 2)}` }
   ];
+  if (fees && Object.keys(fees).length){
+    userParts.push({ type:'text', text: `FEES_TABLE:\n${JSON.stringify(fees, null, 2)}` });
+  }
   if(ocrText && ocrText.trim()){
     userParts.push({ type:'text', text:`OCR_TEXT (raw):\n${ocrText.slice(0,20000)}` });
   }
@@ -219,7 +279,6 @@ function enforcePaymentRecency(result, applicationDate){
     const ref = parsePLDate(appStr) || new Date(); // если дата подачи не передана — сегодня
     const checks = Array.isArray(result.checks) ? result.checks : [];
 
-    // найдём существующий чек (или создадим)
     let chk = checks.find(c => c && c.key === 'payment_date_recent');
     if(!chk){
       chk = { key: 'payment_date_recent', title: 'Платёж свежий', required: false };
@@ -240,7 +299,57 @@ function enforcePaymentRecency(result, applicationDate){
     chk.passed = !inFuture && within60;
     chk.details = `payment_date=${paymentStr} ⇒ ${payment.toISOString().slice(0,10)}, reference=${ref.toISOString().slice(0,10)}, diffDays=${diff}, threshold=60`;
   }catch(e){
-    // не падаем из-за пост-починки
+    // не падаем
+  }
+}
+
+// post-fix for oplata_skarbowa: compute amount_correct deterministically
+function enforceFeeAmount(result, applicationDate, pathName, fees){
+  try{
+    if(!result || (result.docType!=='oplata_skarbowa' && result.docType!=='opłata_skarbowa')) return;
+
+    const fields = result.fieldsExtracted = result.fieldsExtracted || {};
+    const checks = Array.isArray(result.checks) ? result.checks : (result.checks = []);
+
+    let amountStr = fields.amount || fields.amount_raw || '';
+    let amountVal = fields.amount_value;
+    if (amountVal == null) {
+      amountVal = parseAmountToNumber(amountStr);
+      if (amountVal == null && typeof fields.amount === 'string') amountVal = parseAmountToNumber(fields.amount);
+      if (amountVal == null && typeof fields.amount_raw === 'string') amountVal = parseAmountToNumber(fields.amount_raw);
+      fields.amount_value = amountVal ?? null;
+    }
+
+    const title = (fields.title || '').toString();
+    const recipient = (fields.recipient || '').toString();
+    const llmPurpose = (fields.detected_purpose || '').toString();
+
+    const purpose = resolvePurpose(pathName || '', llmPurpose, title, recipient, fees);
+    const expected = fees?.items?.[purpose]?.amount_pln ?? fees?.items?.temporary_residence_general?.amount_pln ?? null;
+    const tolerance = fees?.tolerance_pln ?? 1;
+
+    fields.detected_purpose = purpose;
+    fields.expected_amount = expected;
+
+    let chk = checks.find(c => c && c.key === 'amount_correct');
+    if(!chk){
+      chk = { key: 'amount_correct', title: 'Сумма соответствует цели', required: true };
+      checks.push(chk);
+    }
+
+    if (amountVal == null || expected == null){
+      chk.passed = false;
+      chk.details = `Недостаточно данных для проверки суммы: amount=${amountVal}, expected=${expected}, purpose=${purpose}`;
+      return;
+    }
+
+    const delta = Math.abs(amountVal - expected);
+    fields.amount_delta = delta;
+
+    chk.passed = delta <= tolerance;
+    chk.details = `amount=${amountVal} PLN, expected=${expected} PLN (purpose=${purpose}), tolerance=±${tolerance}, delta=${delta}`;
+  }catch(e){
+    // не падаем
   }
 }
 
@@ -299,13 +408,14 @@ async function processNow({ files, docType, citizenship, pathName, applicationDa
   }
 
   const mergedDataUrl = mergedJPEG ? `data:image/jpeg;base64,${mergedJPEG.toString('base64')}` : null;
-  const { basePrompt, schema, rules } = await loadRules();
+  const { basePrompt, schema, rules, fees } = await loadRules();
   const rulesForType = rules[docType] || { checks:[], fields:[] };
 
   const messages = buildMessages({
     basePrompt,
     schema,
     rulesForType,
+    fees,
     context: { docType, citizenship, path: pathName, applicationDate, userName },
     ocrText,
     mergedImageDataUrl: mergedDataUrl
@@ -315,8 +425,9 @@ async function processNow({ files, docType, citizenship, pathName, applicationDa
   result.ocrQuality = result.ocrQuality || estimateOcrQuality(ocrText||'');
   result.docType = result.docType || docType;
 
-  // === детерминированная поправка для "Платёж свежий" ===
+  // === детерминированные поправки для opłata skarbowa ===
   enforcePaymentRecency(result, applicationDate);
+  enforceFeeAmount(result, applicationDate, pathName, fees);
 
   if(wantDebug){
     debug.ocrTextLen = (ocrText||'').length;
