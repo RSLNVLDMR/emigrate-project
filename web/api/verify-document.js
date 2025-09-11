@@ -135,6 +135,13 @@ async function loadRules(){
 
 function buildMessages({ basePrompt, schema, rulesForType, context, ocrText, mergedImageDataUrl }) {
   const sys = basePrompt;
+  const extractionHint =
+`К ИЗВЛЕЧЕНИЮ (если есть в документе/сканах):
+- Для паспорта: passport_stamps[] (дата/страна/тип отметки).
+- Для анкеты: wniosek_trips[] (дата/направление/цель).
+- Для трудового пакета: поля из Zał.1 и договора (сопоставить).
+- Для PIT: имена/PESEL/NIP налогоплательщика/супруга, суммы.`;
+
   const userParts = [
     { type:'text', text:
 `docType: ${context.docType}
@@ -142,6 +149,7 @@ citizenship: ${context.citizenship||'unknown'}
 path: ${context.path||'general'}
 applicationDate: ${context.applicationDate||new Date().toISOString().slice(0,10)}
 userName: ${context.userName||''}
+${extractionHint}
 Return STRICT JSON per schema. If data insufficient: set passed=false with helpful fixTip. If language != PL: advise sworn translation.` },
     { type:'text', text: `SCHEMA:\n${JSON.stringify(schema)}` },
     { type:'text', text: `CHECKLIST FOR TYPE:\n${JSON.stringify(rulesForType, null, 2)}` }
