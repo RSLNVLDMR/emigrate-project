@@ -4,7 +4,7 @@
     "fields": [
       { "key": "applicant_name", "label": "Imię i nazwisko wnioskodawcy" },
       { "key": "date_of_birth", "label": "Data urodzenia", "optional": true },
-      { "key": "voivode", "label": "Właściwy Wojewoda / adresat" },
+      { "key": "voivode", "label": "Właściwy Wojewoda / адресат" },
       { "key": "address", "label": "Adres zamieszkania" },
       { "key": "legal_basis", "label": "Podstawa pobytu (praca/studia/rodzina itd.)" },
       { "key": "submission_date", "label": "Data złożenia" },
@@ -93,15 +93,34 @@
     ],
     "checks": [
       { "key": "file_readable", "title": "Документ читается", "required": true },
-      { "key": "names_match_user_in_title", "title": "ФИО пользователя в назначении/плательщике", "required": true, "logic": "normalized(title or payer_name) contains userName tokens" },
+
+      {
+        "key": "names_match_user_in_title_only",
+        "title": "ФИО пользователя указано в назначении платежа",
+        "required": true,
+        "logic": "normalized(title) contains all tokens of userName. Несовпадение payer_name допустимо и не влияет на этот чек."
+      },
+
       {
         "key": "amount_correct",
         "title": "Сумма соответствует цели",
         "required": true,
         "logic": "1) Определи purpose по path_overrides или purpose_keywords (title/recipient). 2) expected_amount = FEES_TABLE.items[purpose]. 3) amount_value = abs(parsed(amount/amount_raw)); допускай запятая/точка, минус/длинное тире/скобки как знак. 4) Пройдено, если abs(amount_value - expected_amount) <= FEES_TABLE.tolerance_pln."
       },
-      { "key": "recipient_correct", "title": "Правильный получатель/счёт", "required": true, "logic": "recipient/account_number matches city/voivodeship mapping (heur.)" },
-      { "key": "payment_date_recent", "title": "Платёж свежий", "required": false }
+
+      {
+        "key": "recipient_correct",
+        "title": "Правильный получатель/счёт",
+        "required": true,
+        "logic": "recipient/account_number соответствуют нужному органу (эвристика по названию/городу/воеводству)"
+      },
+
+      {
+        "key": "payment_date_recent",
+        "title": "Платёж свежий",
+        "required": false,
+        "logic": "payment_date существует, не в будущем, и находится в пределах 60 дней ДО applicationDate (если нет applicationDate — относительно сегодняшней даты)."
+      }
     ],
     "advice_presets": [
       "В назначении платежа укажите цель и ФИО: напр. «Opłata skarbowa – Jan Kowalski».",
@@ -335,7 +354,7 @@
       { "key": "tax_office_stamp", "label": "Źródłowa pieczęć/nazwa urzędu (surowy OCR)", "optional": true },
       { "key": "amounts", "label": "Kwoty (przychód/dochod/podatek/nadpłata)", "type": "object" },
       { "key": "submission_date", "label": "Data złożenia", "optional": true },
-      { "key": "signature_present", "label": "Podpis wykryty (boolean, heur.)", "type": "boolean", "optional": true },
+      { "key": "signature_present", "label": "Podpis wykрытый (boolean, heur.)", "type": "boolean", "optional": true },
       { "key": "signature_mode", "label": "Sposób podpisu (paper_handwritten/ePUAP/qualified/authorizing_data/unknown)", "optional": true },
       { "key": "signature_evidence", "label": "Dowody podpisu (list surowych fraz OCR)", "type": "array", "optional": true }
     ],
@@ -366,7 +385,7 @@
     "title": "Wyciąg bankowy",
     "fields": [
       { "key": "account_holder_name", "label": "Posiadacz rachunku" },
-      { "key": "period", "label": "Okres wyciągu" },
+      { "key": "period", "label": "Okres wyciąгу" },
       { "key": "bank_country", "label": "Kraj banku", "optional": true },
       { "key": "regular_inflows", "label": "Regularne wpływy", "type": "boolean", "optional": true }
     ],
