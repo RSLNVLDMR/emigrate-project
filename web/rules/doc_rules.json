@@ -165,12 +165,44 @@
       {"id":"year_ok","title":"Корректный год и суммы","severity":"medium"}
     ]
   },
-  "pit_37": {
-    "fields": ["year","amounts","stamp"],
-    "checks": [
-      {"id":"year_ok","title":"Корректный год и суммы","severity":"medium"}
-    ]
-  },
+"pit_37": {
+  "title": "PIT-37 (roczne zeznanie podatkowe)",
+  "fields": [
+    { "key": "year", "label": "Rok podatkowy (np. 2022/2023)" },
+    { "key": "taxpayer_name", "label": "Nazwisko i imię podatnika" },
+    { "key": "taxpayer_pesel_or_nip", "label": "PESEL lub NIP podatnika" },
+    { "key": "spouse_name", "label": "Nazwisko i imię małżonka", "optional": true },
+    { "key": "spouse_pesel_or_nip", "label": "PESEL lub NIP małżonka", "optional": true },
+    { "key": "filing_mode", "label": "Sposób rozliczenia (samodzielnie/wspólnie z małżonkiem)" },
+    { "key": "tax_office", "label": "Urząd skarbowy" },
+    { "key": "amounts", "label": "Kwoty (przychód/dochod/podatek/nadpłata)", "type": "object" },
+    { "key": "submission_date", "label": "Data złożenia", "optional": true },
+    { "key": "signature_present", "label": "Podpis(y) lub kwalifikowany podpis/ePUAP", "type": "boolean", "optional": true }
+  ],
+  "checks": [
+    { "key": "has_year", "title": "Указан год декларации", "required": true,
+      "logic": "year is a 4-digit >= 2000" },
+    { "key": "has_taxpayer_name", "title": "Найдено ФИО налогоплательщика", "required": true,
+      "logic": "taxpayer_name not empty" },
+    { "key": "has_id_taxpayer", "title": "Указан PESEL/NIP налогоплательщика", "required": true,
+      "logic": "taxpayer_pesel_or_nip matches (\\b\\d{11}\\b|\\b\\d{10}\\b)" },
+    { "key": "spouse_consistency", "title": "Согласованность режима совместного декларирования", "required": false,
+      "logic": "if filing_mode indicates joint => spouse_name and spouse_pesel_or_nip present" },
+    { "key": "names_match_user", "title": "ФИО в PIT совпадает с ФИО пользователя", "required": true,
+      "logic": "normalized userName tokens must be all contained in taxpayer_name OR spouse_name" },
+    { "key": "amounts_present", "title": "Присутствуют ключевые суммы (доход/налог/надплата)", "required": true,
+      "logic": "amounts has any of [totalIncome, taxDue, overpayment]" },
+    { "key": "tax_office_present", "title": "Указан налоговый орган", "required": false,
+      "logic": "tax_office not empty" },
+    { "key": "signature_check", "title": "Подпись/КЭП присутствует (если бумажная форма)", "required": false,
+      "logic": "if PDF is scan => signature_present true OR advice to sign; if ePUAP/interactive => can be false" }
+  ],
+  "advice_presets": [
+    "Если документ подается в бумаге — требуется собственноручная подпись(и) в соответствующих полях.",
+    "Проверьте корректность PESEL/NIP и соответствие ФИО данным паспорта.",
+    "Если декларация совместная — обязательно укажите данные супруга/супруги."
+  ]
+},
   "pesel_ukr": {
     "fields": ["pesel","ukrFlag","fullName","issueDate"],
     "checks": [
