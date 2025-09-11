@@ -141,6 +141,7 @@ function buildMessages({ basePrompt, schema, rulesForType, context, ocrText, mer
 citizenship: ${context.citizenship||'unknown'}
 path: ${context.path||'general'}
 applicationDate: ${context.applicationDate||new Date().toISOString().slice(0,10)}
+userName: ${context.userName||''}
 Return STRICT JSON per schema. If data insufficient: set passed=false with helpful fixTip. If language != PL: advise sworn translation.` },
     { type:'text', text: `SCHEMA:\n${JSON.stringify(schema)}` },
     { type:'text', text: `CHECKLIST FOR TYPE:\n${JSON.stringify(rulesForType, null, 2)}` }
@@ -171,7 +172,7 @@ async function callLLM({ messages }){
   return json;
 }
 
-async function processNow({ files, docType, citizenship, pathName, applicationDate, wantDebug=false, wantDebugFull=false }){
+async function processNow({ files, docType, citizenship, pathName, applicationDate, userName, wantDebug=false, wantDebugFull=false }){
   const pdfs = files.filter(f=>f.mimetype==='application/pdf');
   const imgs = files.filter(f=>f.mimetype?.startsWith('image/'));
   if(pdfs.length && imgs.length) throw new Error('Upload either PDF or images, not both');
@@ -233,7 +234,7 @@ async function processNow({ files, docType, citizenship, pathName, applicationDa
     basePrompt,
     schema,
     rulesForType,
-    context: { docType, citizenship, path: pathName, applicationDate },
+    context: { docType, citizenship, path: pathName, applicationDate, userName },
     ocrText,
     mergedImageDataUrl: mergedDataUrl
   });
@@ -245,6 +246,7 @@ async function processNow({ files, docType, citizenship, pathName, applicationDa
   if(wantDebug){
     debug.ocrTextLen = (ocrText||'').length;
     debug.rulesUsed  = rulesForType;
+    debug.userName   = userName || '';
     if(wantDebugFull){
       debug.ocrTextHead = (ocrText||'').slice(0, 2000);
     }
@@ -270,6 +272,7 @@ export default async function handler(req, res){
     const citizenship = String(fields.citizenship||'').trim() || '';
     const pathName = String(fields.path||'').trim() || '';
     const applicationDate = String(fields.applicationDate||'').trim() || '';
+    const userName = String(fields.userName||'').trim() || '';
     const wantDebug = String(fields.debug||'')==='1';
     const wantDebugFull = String(fields.debug_full||'')==='1';
 
@@ -278,7 +281,7 @@ export default async function handler(req, res){
     const total = sumSize(files);
     if(total > 30*1024*1024) return bad(res, 400, 'Total size exceeds 30MB');
 
-    const { result, debug } = await processNow({ files, docType, citizenship, pathName, applicationDate, wantDebug, wantDebugFull });
+    const { result, debug } = await processNow({ files, docType, citizenship, pathName, applicationDate, userName, wantDebug, wantDebugFull });
     res.setHeader('Content-Type','application/json; charset=utf-8');
     res.end(JSON.stringify({ ok:true, result, ...(debug ? { debug } : {}) }));
   }catch(e){
