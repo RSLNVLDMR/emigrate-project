@@ -43,8 +43,8 @@
     </header>
 
     <div class="card">
-      <div class="p">Эта страница предназначена для внутреннего теста OCR/LLM-пайплайна по документам (PDF/изображения) и правил проверки.</div>
-      <div class="hint">Совет: для PDF сначала глянь «Preview», чтобы понять, видит ли сервер текстовый слой и удаётся ли отрендерить страницы.</div>
+      <div class="p">Внутренний тест OCR/LLM-пайплайна по документам и правил проверки.</div>
+      <div class="hint">Сначала запусти Preview, чтобы понять, виден ли текстовый слой/рендер страниц.</div>
     </div>
 
     <div class="card" style="margin-top:12px">
@@ -73,6 +73,13 @@
       </div>
 
       <div class="row" style="margin-top:8px">
+        <div class="col" style="flex:1">
+          <label class="small-muted">ФИО пользователя (для сверки имен)</label>
+          <input id="userName" class="input" placeholder="Пример: Ivan Petrov" />
+        </div>
+      </div>
+
+      <div class="row" style="margin-top:8px">
         <div class="col">
           <label class="small-muted">Файлы (1 PDF до 20 стр. или до 20 изображений, ≤ 30 MB)</label>
           <input id="fileInput" type="file" class="input" multiple accept="application/pdf,image/*" />
@@ -82,10 +89,10 @@
 
       <div class="row" style="margin-top:8px">
         <div class="inline-flex">
-          <label><input type="checkbox" id="wantPreview" checked /> Сначала запустить Preview (pdf-ocr-preview)</label>
+          <label><input type="checkbox" id="wantPreview" checked /> Сначала Preview (pdf-ocr-preview)</label>
           <label><input type="checkbox" id="previewDoOCR" /> OCR 1-й страницы (дороже)</label>
-          <label><input type="checkbox" id="debugFullText" /> Возвращать полный OCR-текст (до 20k)</label>
-          <label><input type="checkbox" id="debugInVerify" checked /> Включить debug в verify-document</label>
+          <label><input type="checkbox" id="debugFullText" /> Полный OCR-текст (до 20k)</label>
+          <label><input type="checkbox" id="debugInVerify" checked /> Debug в verify-document</label>
         </div>
       </div>
 
@@ -148,7 +155,7 @@ async function loadDocTypes(){
   }
 }
 
-// lang switch (минимальный, без словаря — для dev-экрана ок)
+// lang switch (минимальный)
 (function initLang(){
   const ls = $("#langSwitch");
   const cur = localStorage.lang || 'ru';
@@ -224,6 +231,7 @@ function renderVerify(js){
         <div class="muted">pagesRendered</div><div>${dbg.pagesRendered??0}</div>
         <div class="muted">mergedJpegBytes</div><div>${humanBytes(dbg.mergedJpegBytes||0)}</div>
         <div class="muted">ocrQuality</div><div>${esc(rst.ocrQuality||'')}</div>
+        <div class="muted">userName</div><div>${esc(dbg.userName||'')}</div>
       </div>
       <div class="small-muted" style="margin-top:6px">rulesUsed:</div>
       <div class="codeblock mono">${esc(JSON.stringify(dbg.rulesUsed||{}, null, 2))}</div>
@@ -279,6 +287,7 @@ $("#btnRun").onclick = async ()=>{
   const citizenship = $("#citizenship").value || '';
   const pathName = $("#pathName").value || '';
   const applicationDate = $("#applicationDate").value || '';
+  const userName = $("#userName").value || '';
 
   // Preview: только PDF (если выбран)
   const wantPreview = $("#wantPreview").checked;
@@ -302,6 +311,7 @@ $("#btnRun").onclick = async ()=>{
   if(citizenship) fdVerify.append('citizenship', citizenship);
   if(pathName) fdVerify.append('path', pathName);
   if(applicationDate) fdVerify.append('applicationDate', applicationDate);
+  if(userName) fdVerify.append('userName', userName);
   await runVerify(fdVerify);
 };
 
