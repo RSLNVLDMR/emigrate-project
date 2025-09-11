@@ -299,41 +299,6 @@
   <script type="module">
     import { $$, i18n, storage } from './utils.js';
     
-    // Делаем функции доступными глобально
-    window.$$ = $$;
-    window.i18n = i18n;
-    window.storage = storage;
-
-    function bindLang(){ 
-      $$('.lang button').forEach(b=> b.onclick = async ()=> {
-        await i18n.load(b.dataset.lang);
-        highlightLang();
-      }); 
-    }
-
-    function highlightLang(){ 
-      $$('.lang button').forEach(b=> b.classList.toggle('active', b.dataset.lang===i18n.lang)); 
-    }
-
-    function initTG(){ 
-      const tg = window.Telegram && window.Telegram.WebApp; 
-      if(!tg) return; 
-      tg.expand(); 
-      tg.ready(); 
-    }
-
-    async function boot(){
-      initTG();
-      bindLang();
-      await i18n.load(storage.get('lang','ru'));
-      highlightLang();
-    }
-
-    document.addEventListener('DOMContentLoaded', boot);
-    window.addEventListener('pageshow', boot);
-  </script>
-
-  <script>
     // Данные для разных типов договоров
     const contractData = {
       uop: {
@@ -410,13 +375,29 @@
       const contractInfo = document.getElementById('contractInfo');
       const contractDetails = document.getElementById('contractDetails');
       
+      if (!select || !contractInfo || !contractDetails) {
+        console.log('Elements not found');
+        return;
+      }
+      
       if (!select.value) {
         contractInfo.style.display = 'none';
         return;
       }
       
       const data = contractData[select.value];
-      if (!data) return;
+      if (!data) {
+        console.log('No data for contract type:', select.value);
+        return;
+      }
+      
+      // Получаем переводы с fallback
+      const salaryLabel = (window.i18n && window.i18n.t) ? window.i18n.t('work_salary_label') : '💰 Зарплата:';
+      const durationLabel = (window.i18n && window.i18n.t) ? window.i18n.t('work_duration_label') : '⏰ Срок:';
+      const scopeLabel = (window.i18n && window.i18n.t) ? window.i18n.t('work_scope_label') : '📊 Объем работы:';
+      const insuranceLabel = (window.i18n && window.i18n.t) ? window.i18n.t('work_insurance_label') : '🏥 Страховка:';
+      const documentsTitle = (window.i18n && window.i18n.t) ? window.i18n.t('work_documents_title') : '📋 Необходимые документы:';
+      const requirementsTitle = (window.i18n && window.i18n.t) ? window.i18n.t('work_requirements_title') : '✅ Требования:';
       
       contractDetails.innerHTML = `
         <div class="contract-type-info">
@@ -425,29 +406,89 @@
           
           <div class="contract-details-grid">
             <div class="detail-item">
-              <div class="detail-label">💰 Зарплата:</div>
+              <div class="detail-label">${salaryLabel}</div>
               <div class="detail-value">${data.salary}</div>
             </div>
             <div class="detail-item">
-              <div class="detail-label">⏰ Срок:</div>
+              <div class="detail-label">${durationLabel}</div>
               <div class="detail-value">${data.duration}</div>
             </div>
             <div class="detail-item">
-              <div class="detail-label">📊 Объем работы:</div>
+              <div class="detail-label">${scopeLabel}</div>
               <div class="detail-value">${data.scope}</div>
             </div>
             <div class="detail-item">
-              <div class="detail-label">🏥 Страховка:</div>
+              <div class="detail-label">${insuranceLabel}</div>
               <div class="detail-value">${data.insurance}</div>
             </div>
           </div>
           
+          <div class="info-section">
+            <h4>${documentsTitle}</h4>
+            <div class="documents-list">
+              ${data.documents.map(doc => `<div class="document-item">${doc}</div>`).join('')}
+            </div>
+          </div>
+          
+          <div class="info-section">
+            <h4>${requirementsTitle}</h4>
+            <div class="requirements-list">
+              ${data.requirements.map(req => `<div class="requirement-item">${req}</div>`).join('')}
+            </div>
+          </div>
         </div>
       `;
       
       contractInfo.style.display = 'block';
+      console.log('Contract info updated for:', select.value);
     }
 
+    // Делаем функции доступными глобально
+    window.$$ = $$;
+    window.i18n = i18n;
+    window.storage = storage;
+    window.updateContractInfo = updateContractInfo;
+
+    function bindLang(){ 
+      $$('.lang button').forEach(b=> b.onclick = async ()=> {
+        await i18n.load(b.dataset.lang);
+        highlightLang();
+        // Обновляем дропдаун при смене языка
+        updateContractInfo();
+      }); 
+    }
+
+    function highlightLang(){ 
+      $$('.lang button').forEach(b=> b.classList.toggle('active', b.dataset.lang===i18n.lang)); 
+    }
+
+    function initTG(){ 
+      const tg = window.Telegram && window.Telegram.WebApp; 
+      if(!tg) return; 
+      tg.expand(); 
+      tg.ready(); 
+    }
+
+    async function boot(){
+      initTG();
+      bindLang();
+      await i18n.load(storage.get('lang','ru'));
+      highlightLang();
+      // Инициализируем дропдаун после загрузки переводов
+      updateContractInfo();
+      
+      // Добавляем обработчик события change для дропдауна
+      const contractSelect = document.getElementById('contractType');
+      if (contractSelect) {
+        contractSelect.addEventListener('change', updateContractInfo);
+      }
+    }
+
+    document.addEventListener('DOMContentLoaded', boot);
+    window.addEventListener('pageshow', boot);
+  </script>
+
+  <script>
     function checkDocument() {
       // Заглушка для AI проверки документов
       alert('Функция проверки документов через AI будет доступна в ближайшее время');
