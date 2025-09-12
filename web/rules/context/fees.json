@@ -1,79 +1,70 @@
 {
-  "currency": "PLN",
-  "tolerance_pln": 1.0,
-  "items": {
-    "temporary_residence_general": 340,
-    "temporary_residence_work": 440,
-    "blue_card": 440,
-    "business": 340,
-    "family_reunification": 340,
-    "study": 340,
-
-    "card_print_adult": 100,
-    "card_print_minor": 50,
-    "card_replacement_adult": 100,
-    "card_replacement_minor": 50,
-
-    "power_of_attorney": 17,
-    "by_humanitarian_d21": 0
+  "tolerance_pln": 1,
+  "path_overrides": {
+    "work": "temporary_residence_work",
+    "work_standard": "temporary_residence_work",
+    "pobyt_praca": "temporary_residence_work",
+    "blue_card": "blue_card",
+    "niebieska_karta": "blue_card",
+    "business": "temporary_residence_business",
+    "dzialalnosc": "temporary_residence_business",
+    "student": "temporary_residence_study",
+    "studia": "temporary_residence_study",
+    "family_reunification": "temporary_residence_family",
+    "rodzina": "temporary_residence_family",
+    "regularize": "temporary_residence_general",
+    "no_status": "temporary_residence_general"
   },
   "purpose_keywords": {
     "temporary_residence_work": [
       "pobyt czasowy i pracę",
-      "pobyt i pracę",
-      "zezwolenie na pobyt i pracę",
-      "zezwolenie na pobyt czasowy i pracę"
+      "pobyt czasowy i prace",
+      "zezwolenie na pobyt czasowy i pracę",
+      "zezwolenie na pobyt czasowy i prace",
+      "praca",
+      "prace",
+      "zatrudnienie"
     ],
     "blue_card": [
       "niebieska karta",
       "blue card",
-      "zawód wymagający wysokich kwalifikacji"
+      "karta niebieska ue",
+      "niebieską kartę"
     ],
-    "business": [
-      "działalność",
-      "dzialalnosc",
+    "temporary_residence_business": [
+      "działalność gospodarcza",
+      "dzialalnosc gospodarcza",
+      "prowadzenie działalności",
+      "wpis do ceidg",
       "spółka",
       "spolka",
-      "zarząd",
-      "zarzad",
-      "prowadzenie działalności"
+      "krs"
     ],
-    "family_reunification": [
+    "temporary_residence_study": [
+      "studia",
+      "uczelnia",
+      "student",
+      "za studia",
+      "czesne"
+    ],
+    "temporary_residence_family": [
       "połączenie z rodziną",
       "polaczenie z rodzina",
       "rodzina",
-      "małżonek",
-      "malzonek",
-      "dziecko"
-    ],
-    "study": [
-      "studia",
-      "student",
-      "uczelnia",
-      "nauka"
-    ],
-    "card_print_adult": [
-      "wydanie karty pobytu",
-      "opłata za kartę pobytu",
-      "oplata za karte pobytu",
-      "karta pobytu"
-    ],
-    "power_of_attorney": [
-      "pełnomocnictw",
-      "pelnomocnictw"
+      "wspolne zamieszkanie"
     ],
     "temporary_residence_general": [
       "pobyt czasowy",
-      "zezwolenie na pobyt czasowy"
+      "zezwolenie na pobyt czasowy",
+      "wniosek o pobyt"
     ]
   },
-  "path_overrides": {
-    "blue_card": "blue_card",
-    "pobyt_study": "study",
-    "pobyt_support": "temporary_residence_general",
-    "regularize": "temporary_residence_general",
-    "pesel_support": "temporary_residence_general",
-    "asylum_support": "temporary_residence_general",
-    "by_d21": "by_humanitarian_d21"
+  "items": {
+    "temporary_residence_work": { "amount_pln": 440 },
+    "blue_card": { "amount_pln": 440 },
+    "temporary_residence_business": { "amount_pln": 340 },
+    "temporary_residence_study": { "amount_pln": 340 },
+    "temporary_residence_family": { "amount_pln": 340 },
+    "temporary_residence_general": { "amount_pln": 340 }
   }
 }

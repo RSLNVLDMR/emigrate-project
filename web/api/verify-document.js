@@ -38,7 +38,7 @@ function copyU8(view) {
   out.set(src);
   return out;
 }
-function toU8(x){ 
+function toU8(x){
   if (!x) return new Uint8Array();
   if (Buffer.isBuffer(x)) return copyU8(x);
   if (x instanceof Uint8Array) return copyU8(x);
@@ -126,21 +126,85 @@ function estimateOcrQuality(text){
   return 'poor';
 }
 
+function stripDiacritics(s=''){
+  return s.normalize('NFD').replace(/[\u0300-\u036f]/g,'');
+}
+
 async function loadRules(){
   const basePrompt = await fsp.readFile(path.join(root, 'rules', 'prompt.base.txt'), 'utf8');
   const schema = JSON.parse(await fsp.readFile(path.join(root, 'rules', 'schema.verify.json'), 'utf8'));
   const rules = JSON.parse(await fsp.readFile(path.join(root, 'rules', 'doc_rules.json'), 'utf8'));
-  // <-- добавили чтение таблицы сборов
   let fees = {};
   try {
     fees = JSON.parse(await fsp.readFile(path.join(root, 'rules', 'context', 'fees.json'), 'utf8'));
-  } catch {
-    fees = {};
-  }
+  } catch {}
   return { basePrompt, schema, rules, fees };
 }
 
-function buildMessages({ basePrompt, schema, rulesForType, context, ocrText, mergedImageDataUrl, fees }) {
+// ---- date utils (deterministic) ----
+function parsePLDate(s){
+  if(!s || typeof s!=='string') return null;
+  const t = s.trim();
+  let m = t.match(/^(\d{4})[.\-/](\d{2})[.\-/](\d{2})$/);
+  if(m){
+    const [_,Y,Mo,D] = m;
+    const d = new Date(Number(Y), Number(Mo)-1, Number(D));
+    return isNaN(d) ? null : d;
+  }
+  m = t.match(/^(\d{1,2})[.\-/](\d{1,2})[.\-/](\d{4})$/);
+  if(m){
+    const [_,D,Mo,Y] = m;
+    const d = new Date(Number(Y), Number(Mo)-1, Number(D));
+    return isNaN(d) ? null : d;
+  }
+  return null;
+}
+function daysBetween(a, b){
+  const MS = 24*60*60*1000;
+  const da = new Date(a.getFullYear(), a.getMonth(), a.getDate());
+  const db = new Date(b.getFullYear(), b.getMonth(), b.getDate());
+  return Math.floor((da - db)/MS);
+}
+
+// ---- amount utils ----
+function parseAmountToNumber(s=''){
+  if(typeof s !== 'string') s = String(s ?? '');
+  let t = s.trim();
+  let negative = /^\(.*\)$/.test(t);
+  t = t.replace(/^\((.*)\)$/, '$1');
+  t = t.replace(/[–—−]/g, '-');
+  t = t.replace(/\s+/g,'').replace(/pln|zł|zl/ig,'');
+  t = t.replace(',', '.');
+  const m = t.match(/^-?\d+(\.\d+)?/);
+  let num = m ? parseFloat(m[0]) : NaN;
+  if(isNaN(num)) return null;
+  if(negative) num = -Math.abs(num);
+  return Math.abs(num);
+}
+
+function detectPurposeByKeywords(title='', recipient='', fees){
+  const low = stripDiacritics((title+' '+recipient).toLowerCase());
+  const map = fees?.purpose_keywords || {};
+  for(const [purpose, arr] of Object.entries(map)){
+    if(arr.some(k => low.includes(stripDiacritics(k.toLowerCase())))){
+      return purpose;
+    }
+  }
+  return null;
+}
+
+function resolvePurpose(pathName='', detectedPurpose='', title='', recipient='', fees){
+  const ov = fees?.path_overrides || {};
+  const keyFromPath = ov[pathName] || ov[(pathName||'').toLowerCase()];
+  if(keyFromPath) return keyFromPath;
+  if(detectedPurpose) return detectedPurpose;
+  const byKw = detectPurposeByKeywords(title, recipient, fees);
+  if(byKw) return byKw;
+  return 'temporary_residence_general';
+}
+
+// ---- LLM messages ----
+function buildMessages({ basePrompt, schema, rulesForType, fees, context, ocrText, mergedImageDataUrl }) {
   const sys = basePrompt;
   const extractionHint =
 `К ИЗВЛЕЧЕНИЮ (если есть в документе/сканах):
@@ -159,10 +223,11 @@ userName: ${context.userName||''}
 ${extractionHint}
 Return STRICT JSON per schema. If data insufficient: set passed=false with helpful fixTip. If language != PL: advise sworn translation.` },
     { type:'text', text: `SCHEMA:\n${JSON.stringify(schema)}` },
-    { type:'text', text: `CHECKLIST FOR TYPE:\n${JSON.stringify(rulesForType, null, 2)}` },
-    // <-- добавили таблицу сборов в промпт
-    { type:'text', text: `FEES_TABLE:\n${JSON.stringify(fees)}` }
+    { type:'text', text: `CHECKLIST FOR TYPE:\n${JSON.stringify(rulesForType, null, 2)}` }
   ];
+  if (fees && Object.keys(fees).length){
+    userParts.push({ type:'text', text: `FEES_TABLE:\n${JSON.stringify(fees, null, 2)}` });
+  }
   if(ocrText && ocrText.trim()){
     userParts.push({ type:'text', text:`OCR_TEXT (raw):\n${ocrText.slice(0,20000)}` });
   }
@@ -189,6 +254,127 @@ async function callLLM({ messages }){
   return json;
 }
 
+// === пост-валидации для opłata skarbowa ===
+
+// 1) «Платёж свежий»: один чек, приоритет applicationDate, иначе — сегодня.
+function enforcePaymentRecency(result, applicationDate){
+  try{
+    if(!result || (result.docType!=='oplata_skarbowa' && result.docType!=='opłata_skarbowa')) return;
+
+    const fields = result.fieldsExtracted || {};
+    const paymentStr = fields.payment_date || fields.paymentDate || '';
+    const refDate = parsePLDate(applicationDate) || new Date();
+    const usedRefLabel = parsePLDate(applicationDate) ? 'applicationDate' : 'today';
+
+    const RECENCY_KEYS = new Set(['payment_date_recent','payment_recent','payment_recency','payment_fresh']);
+    const checks = Array.isArray(result.checks) ? result.checks.filter(c=>{
+      if(!c) return false;
+      if(RECENCY_KEYS.has(c.key)) return false;
+      if(typeof c.title==='string' && /плат[её]ж.*свеж/i.test(c.title)) return false;
+      return true;
+    }) : [];
+
+    const chk = { key: 'payment_date_recent', title: 'Платёж свежий', required: false };
+
+    const payment = parsePLDate(paymentStr);
+    if(!payment){
+      chk.passed = false;
+      chk.details = 'Не удалось разобрать дату платежа (ожидается DD.MM.YYYY или YYYY-MM-DD).';
+    } else {
+      const diff = daysBetween(refDate, payment);
+      const inFuture = diff < 0;
+      const within60 = diff <= 60;
+      chk.passed = !inFuture && within60;
+      chk.details = `payment_date=${paymentStr} ⇒ ${payment.toISOString().slice(0,10)}, ref(${usedRefLabel})=${refDate.toISOString().slice(0,10)}, diffDays=${diff}, threshold=60`;
+    }
+
+    checks.push(chk);
+    result.checks = checks;
+  }catch(e){}
+}
+
+// 2) «Сумма соответствует цели»: один чек, детерминированно, по fees.json
+function enforceFeeAmount(result, applicationDate, pathName, fees){
+  try{
+    if(!result || (result.docType!=='oplata_skarbowa' && result.docType!=='opłata_skarbowa')) return;
+
+    const fields = result.fieldsExtracted = result.fieldsExtracted || {};
+    let checks = Array.isArray(result.checks) ? result.checks : (result.checks = []);
+
+    // дедуп: вычищаем все возможные LLM-варианты про сумму
+    const AMOUNT_KEYS = new Set(['amount_correct','fee_amount_correct','amount_ok','kwota_poprawna','suma_zgodna']);
+    checks = checks.filter(c=>{
+      if(!c) return false;
+      if(AMOUNT_KEYS.has(c.key)) return false;
+      if(typeof c.title==='string' && /сумм[аы].*соответ/i.test(c.title)) return false;
+      if(typeof c.title==='string' && /(kwota|suma).*(zgodna|poprawna)/i.test(c.title)) return false;
+      if(typeof c.title==='string' && /amount.*(match|correct)/i.test(c.title)) return false;
+      return true;
+    });
+
+    result.checks = checks; // применяем отфильтрованный список
+
+    // парс суммы
+    let amountStr = fields.amount || fields.amount_raw || '';
+    let amountVal = fields.amount_value;
+    if (amountVal == null) {
+      amountVal = parseAmountToNumber(amountStr);
+      if (amountVal == null && typeof fields.amount === 'string') amountVal = parseAmountToNumber(fields.amount);
+      if (amountVal == null && typeof fields.amount_raw === 'string') amountVal = parseAmountToNumber(fields.amount_raw);
+      fields.amount_value = amountVal ?? null;
+    }
+
+    const title = (fields.title || '').toString();
+    const recipient = (fields.recipient || '').toString();
+    const llmPurpose = (fields.detected_purpose || '').toString();
+
+    const purpose = resolvePurpose(pathName || '', llmPurpose, title, recipient, fees);
+    const expected = fees?.items?.[purpose]?.amount_pln ?? fees?.items?.temporary_residence_general?.amount_pln ?? null;
+    const tolerance = fees?.tolerance_pln ?? 1;
+
+    fields.detected_purpose = purpose;
+    fields.expected_amount = expected;
+
+    const chk = { key: 'amount_correct', title: 'Сумма соответствует цели', required: true };
+
+    if (amountVal == null || expected == null){
+      chk.passed = false;
+      chk.details = `Недостаточно данных для проверки суммы: amount=${amountVal}, expected=${expected}, purpose=${purpose}`;
+    } else {
+      const delta = Math.abs(amountVal - expected);
+      fields.amount_delta = delta;
+      chk.passed = delta <= tolerance;
+      chk.details = `amount=${amountVal} PLN, expected=${expected} PLN (purpose=${purpose}), tolerance=±${tolerance}, delta=${delta}`;
+    }
+
+    result.checks.push(chk);
+  }catch(e){}
+}
+
+// 3) Вердикт выравниваем по чек-боксам (для opłata skarbowa)
+function enforceVerdictConsistency(result){
+  try{
+    if(!result || (result.docType!=='oplata_skarbowa' && result.docType!=='opłata_skarbowa')) return;
+
+    const checks = Array.isArray(result.checks) ? result.checks : [];
+    const failedReq = checks.filter(c => c && c.required && c.passed === false).map(c => c.title || c.key);
+    const failedOpt = checks.filter(c => c && !c.required && c.passed === false).map(c => c.title || c.key);
+
+    let status = 'pass';
+    if (failedReq.length) status = 'fail';
+    else if (failedOpt.length) status = 'uncertain';
+
+    const summary =
+      status === 'pass'
+        ? 'Все обязательные проверки пройдены.'
+        : status === 'fail'
+          ? `Провалены обязательные проверки: ${failedReq.join(', ')}.`
+          : `Есть замечания по необязательным пунктам: ${failedOpt.join(', ')}.`;
+
+    result.verdict = { ...(result.verdict || {}), status, summary };
+  }catch(e){}
+}
+
 async function processNow({ files, docType, citizenship, pathName, applicationDate, userName, wantDebug=false, wantDebugFull=false }){
   const pdfs = files.filter(f=>f.mimetype==='application/pdf');
   const imgs = files.filter(f=>f.mimetype?.startsWith('image/'));
@@ -202,18 +388,15 @@ async function processNow({ files, docType, citizenship, pathName, applicationDa
   if(pdfs.length===1){
     const buf = await readTmp(pdfs[0].filepath);
 
-    // 1) «Живой» текст
     let viaParse = await tryPdfParseText(buf);
     debug.pdfParseLen = viaParse.length;
 
-    // 2) pdfjs getTextContent
     let viaPdfjs = '';
     try { viaPdfjs = await pdfExtractTextViaPdfjs(buf, 20); } catch {}
     debug.pdfjsLen = viaPdfjs.length;
 
     ocrText = viaParse.length >= viaPdfjs.length ? viaParse : viaPdfjs;
 
-    // 3) JPEG из первых 10 страниц
     try{
       const { pngs, pages } = await renderPdfPages(buf, 10, 2.0);
       debug.pagesRendered = pages;
@@ -251,26 +434,32 @@ async function processNow({ files, docType, citizenship, pathName, applicationDa
     basePrompt,
     schema,
     rulesForType,
+    fees,
     context: { docType, citizenship, path: pathName, applicationDate, userName },
     ocrText,
-    mergedImageDataUrl: mergedDataUrl,
-    fees
+    mergedImageDataUrl: mergedDataUrl
   });
 
   const result = await callLLM({ messages });
   result.ocrQuality = result.ocrQuality || estimateOcrQuality(ocrText||'');
   result.docType = result.docType || docType;
 
+  // === детерминированные поправки для opłata skarbowa ===
+  enforcePaymentRecency(result, applicationDate);
+  enforceFeeAmount(result, applicationDate, pathName, fees);
+  enforceVerdictConsistency(result);
+
+  const debugOut = { ...debug };
   if(wantDebug){
-    debug.ocrTextLen = (ocrText||'').length;
-    debug.rulesUsed  = rulesForType;
-    debug.userName   = userName || '';
+    debugOut.ocrTextLen = (ocrText||'').length;
+    debugOut.rulesUsed  = rulesForType;
+    debugOut.userName   = userName || '';
     if(wantDebugFull){
-      debug.ocrTextHead = (ocrText||'').slice(0, 2000);
+      debugOut.ocrTextHead = (ocrText||'').slice(0, 2000);
     }
   }
 
-  return { result, debug: wantDebug ? debug : undefined };
+  return { result, debug: wantDebug ? debugOut : undefined };
 }
 
 function bad(res, code, error){
@@ -306,4 +495,3 @@ export default async function handler(req, res){
     bad(res, 500, e.message || 'Internal error');
   }
 }
-
