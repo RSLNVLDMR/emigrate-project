@@ -145,9 +145,8 @@
       const row = document.createElement('div');
       row.className = 'item';
 
-      // Показываем новое имя для пункта address
+      // Используем переводы для всех пунктов
       let title = it.i18n ? t(it.i18n) : (it.title||'');
-      if (it.slug === 'address') title = 'Подтверждение адреса';
 
       const link = moduleLink(it.slug);
       row.innerHTML = `

@@ -40,10 +40,6 @@
         <select id="citizenship" class="input"></select>
       </label>
 
-      <label class="col">
-        <span data-i18n="q_status">Текущий статус</span>
-        <select id="status" class="input"></select>
-      </label>
 
       <label class="col">
         <span data-i18n="q_voivodeship">Воеводство</span>
@@ -68,7 +64,7 @@
       </label>
 
       <label class="col">
-        <span data-i18n="q_income">Уровень заработка</span>
+        <span data-i18n="q_income">Уровень дохода в месяц брутто</span>
         <select id="income_level" class="input"></select>
       </label>
 
@@ -77,31 +73,7 @@
         <select id="application_basis" class="input"></select>
       </label>
 
-      <div id="student_extra" class="card hidden">
-        <div class="h2" data-i18n="q_student_block">Данные для учащегося</div>
-        <label class="col"><span data-i18n="q_student_inst">Учебное заведение</span><input id="stud_inst" class="input" placeholder="UW / PW / …"/></label>
-        <label class="col"><span data-i18n="q_student_doc">Документ</span>
-          <select id="stud_doc" class="input">
-            <option value="o_przyjeciu" data-i18n="q_student_doc_adm">Zaświadczenie o przyjęciu</option>
-            <option value="o_studiowaniu" data-i18n="q_student_doc_study">Zaświadczenie o studiowaniu</option>
-          </select>
-        </label>
-        <div class="row">
-          <label class="col" style="flex:1"><span data-i18n="q_student_start">Начало (ДД.ММ.ГГГГ)</span><input id="stud_start" class="input" placeholder="01.10.2025"/></label>
-          <label class="col" style="flex:1"><span data-i18n="q_student_end">Окончание (ДД.ММ.ГГГГ)</span><input id="stud_end" class="input" placeholder="30.06.2026"/></label>
-        </div>
-      </div>
 
-      <div id="nostatus_extra" class="card hidden">
-        <div class="h2" data-i18n="q_ns_block">Если нет статуса</div>
-        <label class="col"><span data-i18n="q_ns_entry">Дата последнего въезда (ДД.ММ.ГГГГ)</span><input id="ns_entry" class="input" placeholder="15.08.2025"/></label>
-        <label class="col"><span data-i18n="q_ns_offer">Есть оффер на работу?</span>
-          <select id="ns_offer" class="input">
-            <option value="no" data-i18n="opt_no">Нет</option>
-            <option value="yes" data-i18n="opt_yes">Да</option>
-          </select>
-        </label>
-      </div>
     </div>
 
     <div class="footer">
@@ -162,21 +134,12 @@
       <option value="ru">${t('cit.ru')}</option>
     `;
 
-    // Status
-    const st = $('#status');
-    st.innerHTML = `
-      <option value="pesel_ukr">${t('status.pesel_ukr')}</option>
-      <option value="asylum">${t('status.asylum')}</option>
-      <option value="karta_czasowa">${t('status.karta')}</option>
-      <option value="student">${t('status.student')}</option>
-      <option value="no_status">${t('status.no_status')}</option>
-    `;
-
     // Income
     const inc = $('#income_level');
     inc.innerHTML = `
       <option value="lt_4700">${t('income.lt4700')}</option>
-      <option value="gt_4700">${t('income.gt4700')}</option>
+      <option value="4700_12000">${t('income.4700_12000')}</option>
+      <option value="gt_12000">${t('income.gt12000')}</option>
     `;
 
     // Application Basis
@@ -193,13 +156,11 @@
   const isDDMMYYYY = s => /^([0-2]\d|3[01])\.(0\d|1[0-2])\.(19|20)\d{2}$/.test(String(s||'').trim());
 
   function toggleExtras(){
-    const v = $('#status').value;
-    $('#student_extra').classList.toggle('hidden', v!=='student');
-    $('#nostatus_extra').classList.toggle('hidden', v!=='no_status');
+    // Дополнительные поля убраны
   }
 
   function bindControls(){
-    $('#status').addEventListener('change', toggleExtras);
+    $('#application_basis').addEventListener('change', toggleExtras);
     toggleExtras();
 
     $('#next').onclick = ()=>{
@@ -212,29 +173,11 @@
       const q = {
         first, last,
         citizenship: $('#citizenship').value,
-        status: $('#status').value,
         voivodeship: $('#voivodeship').value,
         income_level: $('#income_level').value,
         application_basis: $('#application_basis').value
       };
 
-      if(q.status==='student'){
-        q.student = {
-          inst: $('#stud_inst').value.trim(),
-          doc: $('#stud_doc').value,
-          start: $('#stud_start').value.trim(),
-          end: $('#stud_end').value.trim()
-        };
-        if(q.student.start && !isDDMMYYYY(q.student.start)){ alert(t('err_date_format')); return; }
-        if(q.student.end && !isDDMMYYYY(q.student.end)){ alert(t('err_date_format')); return; }
-      }
-      if(q.status==='no_status'){
-        q.no_status = {
-          last_entry: $('#ns_entry').value.trim(),
-          has_offer: $('#ns_offer').value==='yes'
-        };
-        if(q.no_status.last_entry && !isDDMMYYYY(q.no_status.last_entry)){ alert(t('err_date_format')); return; }
-      }
 
       storage.set('questionnaire', q);
       location.href = './questionnaire-preview.html';

@@ -42,7 +42,20 @@
     <div class="card">
       <div class="h2" data-i18n="student_zaswiadczenie_what_title">Что это такое</div>
       <p class="p" data-i18n="student_zaswiadczenie_what_text">Справка из вуза о поступлении (o przyjęciu) или обучении (o studiowaniu) с вашими данными, датами и подписью/штампом. Это обязательный документ для подачи на карту побыту по учебе.</p>
-      
+    </div>
+
+    <div class="card" style="margin-top:12px">
+      <div class="h2" data-i18n="student_zaswiadczenie_how_title">Как получить справку</div>
+      <ol class="p">
+        <li data-i18n="student_zaswiadczenie_how_step1">Обратитесь в деканат или через систему USOS вашего вуза</li>
+        <li data-i18n="student_zaswiadczenie_how_step2">Уточните, нужна ли справка o przyjęciu (о поступлении) или o studiowaniu (об обучении)</li>
+        <li data-i18n="student_zaswiadczenie_how_step3">Проверьте правильность написания ФИО латиницей</li>
+        <li data-i18n="student_zaswiadczenie_how_step4">Убедитесь, что указаны все необходимые даты и данные</li>
+        <li data-i18n="student_zaswiadczenie_how_step5">Получите справку с подписью и печатью</li>
+      </ol>
+    </div>
+
+    <div class="card" style="margin-top:12px">
       <div class="h2" data-i18n="student_zaswiadczenie_requirements_title">Требования к справке</div>
       
       <div class="requirement-item important">
@@ -76,29 +89,12 @@
       </div>
     </div>
 
-    <div class="card" style="margin-top:12px">
-      <div class="h2" data-i18n="student_zaswiadczenie_how_title">Как получить справку</div>
-      <ol class="p">
-        <li data-i18n="student_zaswiadczenie_how_step1">Обратитесь в деканат или через систему USOS вашего вуза</li>
-        <li data-i18n="student_zaswiadczenie_how_step2">Уточните, нужна ли справка o przyjęciu (о поступлении) или o studiowaniu (об обучении)</li>
-        <li data-i18n="student_zaswiadczenie_how_step3">Проверьте правильность написания ФИО латиницей</li>
-        <li data-i18n="student_zaswiadczenie_how_step4">Убедитесь, что указаны все необходимые даты и данные</li>
-        <li data-i18n="student_zaswiadczenie_how_step5">Получите справку с подписью и печатью</li>
-      </ol>
-    </div>
-
-    <div class="card" style="margin-top:12px">
-      <div class="h2" data-i18n="student_zaswiadczenie_errors_title">Частые ошибки</div>
-      <ul class="p">
-        <li data-i18n="student_zaswiadczenie_error1">ФИО не совпадает с загранпаспортом (латиница)</li>
-        <li data-i18n="student_zaswiadczenie_error2">Отсутствуют даты начала или окончания обучения</li>
-        <li data-i18n="student_zaswiadczenie_error3">Нет подписи или печати вуза</li>
-        <li data-i18n="student_zaswiadczenie_error4">Нечитаемое качество скана или фото</li>
-        <li data-i18n="student_zaswiadczenie_error5">Справка выдана не на официальном бланке вуза</li>
-      </ul>
-    </div>
 
     <div class="card" style="margin-top:12px; margin-bottom: 80px;">
+      <div class="h2" data-i18n="student_zaswiadczenie_ai_title">🤖 Проверка с AI</div>
+      <p class="p" data-i18n="student_zaswiadczenie_ai_description">
+        Вы можете проверить с AI этот документ, и он покажет ошибки или подтвердит правильность. AI проанализирует все требования и даст детальные рекомендации.
+      </p>
       <button class="btn full" onclick="alert(t('student_zaswiadczenie_ai_coming_soon') || 'Модуль проверки AI будет добавлен в следующей версии')" data-i18n="student_zaswiadczenie_ai_button">🤖 Проверить документ с AI</button>
     </div>
   </div>
