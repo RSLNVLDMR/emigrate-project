@@ -130,10 +130,17 @@ async function loadRules(){
   const basePrompt = await fsp.readFile(path.join(root, 'rules', 'prompt.base.txt'), 'utf8');
   const schema = JSON.parse(await fsp.readFile(path.join(root, 'rules', 'schema.verify.json'), 'utf8'));
   const rules = JSON.parse(await fsp.readFile(path.join(root, 'rules', 'doc_rules.json'), 'utf8'));
-  return { basePrompt, schema, rules };
+  // <-- добавили чтение таблицы сборов
+  let fees = {};
+  try {
+    fees = JSON.parse(await fsp.readFile(path.join(root, 'rules', 'context', 'fees.json'), 'utf8'));
+  } catch {
+    fees = {};
+  }
+  return { basePrompt, schema, rules, fees };
 }
 
-function buildMessages({ basePrompt, schema, rulesForType, context, ocrText, mergedImageDataUrl }) {
+function buildMessages({ basePrompt, schema, rulesForType, context, ocrText, mergedImageDataUrl, fees }) {
   const sys = basePrompt;
   const extractionHint =
 `К ИЗВЛЕЧЕНИЮ (если есть в документе/сканах):
@@ -152,7 +159,9 @@ userName: ${context.userName||''}
 ${extractionHint}
 Return STRICT JSON per schema. If data insufficient: set passed=false with helpful fixTip. If language != PL: advise sworn translation.` },
     { type:'text', text: `SCHEMA:\n${JSON.stringify(schema)}` },
-    { type:'text', text: `CHECKLIST FOR TYPE:\n${JSON.stringify(rulesForType, null, 2)}` }
+    { type:'text', text: `CHECKLIST FOR TYPE:\n${JSON.stringify(rulesForType, null, 2)}` },
+    // <-- добавили таблицу сборов в промпт
+    { type:'text', text: `FEES_TABLE:\n${JSON.stringify(fees)}` }
   ];
   if(ocrText && ocrText.trim()){
     userParts.push({ type:'text', text:`OCR_TEXT (raw):\n${ocrText.slice(0,20000)}` });
@@ -235,7 +244,7 @@ async function processNow({ files, docType, citizenship, pathName, applicationDa
   }
 
   const mergedDataUrl = mergedJPEG ? `data:image/jpeg;base64,${mergedJPEG.toString('base64')}` : null;
-  const { basePrompt, schema, rules } = await loadRules();
+  const { basePrompt, schema, rules, fees } = await loadRules();
   const rulesForType = rules[docType] || { checks:[], fields:[] };
 
   const messages = buildMessages({
@@ -244,7 +253,8 @@ async function processNow({ files, docType, citizenship, pathName, applicationDa
     rulesForType,
     context: { docType, citizenship, path: pathName, applicationDate, userName },
     ocrText,
-    mergedImageDataUrl: mergedDataUrl
+    mergedImageDataUrl: mergedDataUrl,
+    fees
   });
 
   const result = await callLLM({ messages });
@@ -296,3 +306,4 @@ export default async function handler(req, res){
     bad(res, 500, e.message || 'Internal error');
   }
 }
+
