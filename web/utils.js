@@ -43,27 +43,27 @@ export function decidePath(q){
 // Checklist presets (M1 mock)
 export const CHECKLISTS = {
   pobyt_study: [
-    {slug:'student-zaswiadczenie', title:'Zaświadczenie z uczelni'},
-    {slug:'photo-fee-wniosek', title:'Фото, оплата, wniosek'},
-    {slug:'visit-biometrics', title:'Визит и биометрия'}
+    {slug:'student-zaswiadczenie', i18n:'item.student_zaswiadczenie'},
+    {slug:'photo-fee-wniosek', i18n:'item.photo_fee_wniosek'},
+    {slug:'visit-biometrics', i18n:'item.visit_biometrics'}
   ],
   regularize: [
-    {slug:'choose-basis', title:'Определить основание (работа/учёба/семья)'},
-    {slug:'collect-docs', title:'Собрать документы по основанию'},
-    {slug:'submit-pobyt', title:'Подача на pobyt czasowy'}
+    {slug:'choose-basis', i18n:'item.choose_basis'},
+    {slug:'collect-docs', i18n:'item.collect_docs'},
+    {slug:'submit-pobyt', i18n:'item.submit_pobyt'}
   ],
   pesel_support: [
-    {slug:'pesel-rights', title:'Права и подтверждения по PESEL-UKR'},
-    {slug:'work-insurance', title:'Работа и страховка'},
-    {slug:'address', title:'Адрес/мелдунек'}
+    {slug:'pesel-rights', i18n:'item.pesel_rights'},
+    {slug:'work-insurance', i18n:'item.work_insurance'},
+    {slug:'address', i18n:'item.address'}
   ],
   asylum_support: [
-    {slug:'asylum-brief', title:'Ход процедуры и права'},
-    {slug:'parallel-options', title:'Параллельные опции (учёба/работа)'}
+    {slug:'asylum-brief', i18n:'item.asylum_brief'},
+    {slug:'parallel-options', i18n:'item.parallel_options'}
   ],
   pobyt_support: [
-    {slug:'obligations', title:'Текущие обязанности и продление'},
-    {slug:'employer-change', title:'Смена работодателя (если нужно)'}
+    {slug:'obligations', i18n:'item.obligations'},
+    {slug:'employer-change', i18n:'item.employer_change'}
   ]
 };
 
