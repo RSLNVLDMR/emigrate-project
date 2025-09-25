@@ -1,21 +1,46 @@
 {
-  "docType": "string",
-  "language": "string",
-  "ocrQuality": "good|medium|poor",
-  "fieldsExtracted": {},
-  "checks": [
-    {
-      "id": "string",
-      "title": "string",
-      "passed": true,
-      "severity": "low|medium|high",
-      "evidence": "string",
-      "fixTip": "string"
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "VerificationResult",
+  "type": "object",
+  "properties": {
+    "docType": { "type": "string" },
+    "language": { "type": "string" },
+    "ocrQuality": { "type": "string", "enum": ["good", "medium", "poor"] },
+    "fieldsExtracted": {
+      "type": "object",
+      "description": "Ключевые поля, извлечённые из документа (свободная форма по правилам для конкретного docType).",
+      "additionalProperties": true
+    },
+    "checks": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "key": { "type": "string", "description": "Стабильный машинный ключ проверки" },
+          "title": { "type": "string", "description": "Человеко-читаемое название проверки" },
+          "passed": { "type": "boolean", "description": "Итог проверки" },
+          "required": { "type": "boolean", "description": "Обязательная ли проверка для PASS", "default": false },
+          "details": { "type": "string", "description": "Краткие детали/пояснения: что найдено/сравнивалось" },
+          "fixTip": { "type": "string", "description": "Что исправить/дослать/переснять" },
+          "evidence": { "type": "string", "description": "Сырые выдержки/фразы OCR (при наличии)" },
+          "severity": { "type": "string", "enum": ["low", "medium", "high"], "description": "Необязательный приоритет замечания" }
+        },
+        "required": ["key", "title", "passed"]
+      }
+    },
+    "verdict": {
+      "type": "object",
+      "properties": {
+        "status": { "type": "string", "enum": ["pass", "fail", "uncertain"] },
+        "summary": { "type": "string" }
+      },
+      "required": ["status"]
+    },
+    "advice": {
+      "type": "array",
+      "items": { "type": "string" }
     }
-  ],
-  "verdict": {
-    "status": "pass|fail|uncertain",
-    "summary": "string"
   },
-  "advice": ["string"]
+  "required": ["docType", "checks", "verdict"],
+  "additionalProperties": false
 }
