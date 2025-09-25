@@ -16,7 +16,7 @@
       { "key": "names_match_user", "title": "ФИО в анкете совпадает с ФИО пользователя", "required": true, "logic": "normalized(applicant_name) contains all tokens of userName" },
       { "key": "form_complete", "title": "Обязательные поля заполнены", "required": true, "logic": "applicant_name, voivode, address, legal_basis not empty" },
       { "key": "addressed_correctly", "title": "Адресовано верному Wojewoda", "required": true, "logic": "voivode matches region/address" },
-      { "key": "signature_present", "title": "Есть подпись (бумажная подача)", "required": false, "logic": "if paper version then signature_present true" },
+      { "key": "signature_present_chk", "title": "Есть подпись (бумажная подача)", "required": false, "logic": "if paper version then signature_present true" },
       { "key": "data_match_passport", "title": "Данные соответствуют паспорту", "required": false, "logic": "if passport fields present then applicant_name/date_of_birth match passport" },
       { "key": "language_pl_or_sworn", "title": "Присяжный перевод, если не на PL", "required": false }
     ],
@@ -86,35 +86,30 @@
       { "key": "account_number", "label": "Nr rachunku" },
       { "key": "title", "label": "Tytuł przelewu" },
       { "key": "payment_date", "label": "Data płatności" },
-
       { "key": "detected_purpose", "label": "Определённая цель платежа (ключ из FEES_TABLE)", "optional": true },
       { "key": "expected_amount", "label": "Ожидаемая сумма по FEES_TABLE (PLN)", "optional": true },
       { "key": "amount_delta", "label": "Отклонение: abs(amount_value) - expected_amount (PLN)", "optional": true }
     ],
     "checks": [
       { "key": "file_readable", "title": "Документ читается", "required": true },
-
       {
         "key": "names_match_user_in_title_only",
         "title": "ФИО пользователя указано в назначении платежа",
         "required": true,
         "logic": "normalized(title) contains all tokens of userName. Несовпадение payer_name допустимо и не влияет на этот чек."
       },
-
       {
         "key": "amount_correct",
         "title": "Сумма соответствует цели",
         "required": true,
         "logic": "1) Определи purpose по path_overrides или purpose_keywords (title/recipient). 2) expected_amount = FEES_TABLE.items[purpose]. 3) amount_value = abs(parsed(amount/amount_raw)); допускай запятая/точка, минус/длинное тире/скобки как знак. 4) Пройдено, если abs(amount_value - expected_amount) <= FEES_TABLE.tolerance_pln."
       },
-
       {
         "key": "recipient_correct",
         "title": "Правильный получатель/счёт",
         "required": true,
         "logic": "recipient/account_number соответствуют нужному органу (эвристика по названию/городу/воеводству)"
       },
-
       {
         "key": "payment_date_recent",
         "title": "Платёж свежий",
@@ -193,6 +188,54 @@
     ],
     "advice_presets": [
       "Для oświadczenie укажите номер księgi wieczystej (если есть)."
+    ]
+  },
+
+  "zalacznik1": {
+    "title": "Załącznik nr 1 (informacje od pracodawcy)",
+    "fields": [
+      { "key": "employee_name", "label": "Pracownik — imię i nazwisko" },
+      { "key": "employer_name", "label": "Pracodawca — nazwa" },
+      { "key": "position", "label": "Stanowisko" },
+      { "key": "hours_place", "label": "Wymiar czasu / miejsce pracy" },
+      { "key": "salary_brutto", "label": "Wynagrodzenie brutto", "optional": true },
+      { "key": "signer_name", "label": "Osoba podpisująca", "optional": true },
+      { "key": "signer_role", "label": "Rola/umocowanie (np. zarząd)", "optional": true },
+      { "key": "signature_present", "label": "Podpis/ pieczęć", "type": "boolean", "optional": true }
+    ],
+    "checks": [
+      { "key": "file_readable", "title": "Форма читается", "required": true },
+      { "key": "names_match_user", "title": "ФИО работника совпадает с пользователем", "required": true, "logic": "normalized(employee_name) contains userName tokens" },
+      { "key": "position_hours_place_present", "title": "Есть должность/часы/место", "required": true, "logic": "position and hours_place not empty" },
+      { "key": "signature_present_chk", "title": "Есть подпись/печать", "required": false, "logic": "signature_present true OR signer_name present" },
+      { "key": "signer_authorized_hint", "title": "Подписант уполномочен (эвристика)", "required": false, "logic": "signer_role or known KRS roles" }
+    ],
+    "advice_presets": [
+      "Проверьте, что подписант указан в KRS/CEIDG как уполномоченное лицо."
+    ]
+  },
+
+  "employment_contract": {
+    "title": "Umowa o pracę / Umowa zlecenie (трудовой договор)",
+    "fields": [
+      { "key": "employee_name", "label": "Pracownik — imię i nazwisko" },
+      { "key": "employer_name", "label": "Pracodawca — nazwa" },
+      { "key": "position", "label": "Stanowisko" },
+      { "key": "hours_place", "label": "Wymiar czasu / miejsce pracy" },
+      { "key": "salary_brutto", "label": "Wynagrodzenie brutto", "optional": true },
+      { "key": "salary_netto", "label": "Wynagrodzenie netto (est.)", "optional": true },
+      { "key": "start_date", "label": "Data rozpoczęcia", "optional": true },
+      { "key": "signature_present", "label": "Podpisy stron", "type": "boolean", "optional": true }
+    ],
+    "checks": [
+      { "key": "file_readable", "title": "Договор читается", "required": true },
+      { "key": "names_match_user", "title": "ФИО работника совпадает с пользователем", "required": true, "logic": "normalized(employee_name) contains userName tokens" },
+      { "key": "position_hours_place_present", "title": "Есть должность/часы/место", "required": true, "logic": "position and hours_place not empty" },
+      { "key": "salary_present", "title": "Указана ставка", "required": true, "logic": "salary_brutto or salary_netto present" },
+      { "key": "signatures_present", "title": "Подписи сторон на месте", "required": false, "logic": "signature_present true" }
+    ],
+    "advice_presets": [
+      "Убедитесь, что условия договора согласуются с Załącznik nr 1."
     ]
   },
 
@@ -347,14 +390,14 @@
       { "key": "year", "label": "Rok podatkowy" },
       { "key": "taxpayer_name", "label": "Podatnik — nazwisko i imię" },
       { "key": "taxpayer_pesel_or_nip", "label": "PESEL/NIP podatnika" },
-      { "key": "spouse_name", "label": "Małżonek — nazwisko i имię", "optional": true },
+      { "key": "spouse_name", "label": "Małżonek — nazwisko i imię", "optional": true },
       { "key": "spouse_pesel_or_nip", "label": "PESEL/NIP małżonka", "optional": true },
       { "key": "filing_mode", "label": "Sposób rozliczenia (samodzielnie/wspólnie)" },
       { "key": "tax_office", "label": "Urząd Skarbowy (final normalized value)" },
       { "key": "tax_office_stamp", "label": "Źródłowa pieczęć/nazwa urzędu (surowy OCR)", "optional": true },
       { "key": "amounts", "label": "Kwoty (przychód/dochod/podatek/nadpłata)", "type": "object" },
       { "key": "submission_date", "label": "Data złożenia", "optional": true },
-      { "key": "signature_present", "label": "Podpis wykрытый (boolean, heur.)", "type": "boolean", "optional": true },
+      { "key": "signature_present", "label": "Podpis wykryty (boolean, heur.)", "type": "boolean", "optional": true },
       { "key": "signature_mode", "label": "Sposób podpisu (paper_handwritten/ePUAP/qualified/authorizing_data/unknown)", "optional": true },
       { "key": "signature_evidence", "label": "Dowody podpisu (list surowych fraz OCR)", "type": "array", "optional": true }
     ],
@@ -385,7 +428,7 @@
     "title": "Wyciąg bankowy",
     "fields": [
       { "key": "account_holder_name", "label": "Posiadacz rachunku" },
-      { "key": "period", "label": "Okres wyciąгу" },
+      { "key": "period", "label": "Okres wyciągu" },
       { "key": "bank_country", "label": "Kraj banku", "optional": true },
       { "key": "regular_inflows", "label": "Regularne wpływy", "type": "boolean", "optional": true }
     ],
