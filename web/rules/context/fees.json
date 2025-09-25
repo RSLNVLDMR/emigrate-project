@@ -4,58 +4,86 @@
     "work": "temporary_residence_work",
     "work_standard": "temporary_residence_work",
     "pobyt_praca": "temporary_residence_work",
+
     "blue_card": "blue_card",
     "niebieska_karta": "blue_card",
+
     "business": "temporary_residence_business",
     "dzialalnosc": "temporary_residence_business",
+    "działalność": "temporary_residence_business",
+
     "student": "temporary_residence_study",
     "studia": "temporary_residence_study",
+    "pobyt_study": "temporary_residence_study",
+
     "family_reunification": "temporary_residence_family",
     "rodzina": "temporary_residence_family",
+    "family_dependent": "temporary_residence_family",
+
     "regularize": "temporary_residence_general",
     "no_status": "temporary_residence_general"
   },
   "purpose_keywords": {
     "temporary_residence_work": [
-      "pobyt czasowy i pracę",
       "pobyt czasowy i prace",
-      "zezwolenie na pobyt czasowy i pracę",
+      "pobyt czasowy i pracę",
       "zezwolenie na pobyt czasowy i prace",
+      "zezwolenie na pobyt czasowy i pracę",
       "praca",
-      "prace",
-      "zatrudnienie"
+      "zatrudnienie",
+      "umowa o prace",
+      "umowa zlecenie",
+      "zezwolenie na prace"
     ],
     "blue_card": [
       "niebieska karta",
+      "niebieska karta ue",
+      "niebieską kartę",
       "blue card",
-      "karta niebieska ue",
-      "niebieską kartę"
+      "bluecard"
     ],
     "temporary_residence_business": [
-      "działalność gospodarcza",
       "dzialalnosc gospodarcza",
+      "działalność gospodarcza",
       "prowadzenie działalności",
       "wpis do ceidg",
-      "spółka",
+      "ceidg",
+      "krs",
       "spolka",
-      "krs"
+      "spółka",
+      "sp z oo",
+      "spolka z ograniczona odpowiedzialnoscia",
+      "spółka z ograniczoną odpowiedzialnością"
     ],
     "temporary_residence_study": [
       "studia",
       "uczelnia",
       "student",
-      "za studia",
-      "czesne"
+      "czesne",
+      "oplaty za studia",
+      "opłaty za studia",
+      "legitymacja studencka",
+      "rekrutacja"
     ],
     "temporary_residence_family": [
-      "połączenie z rodziną",
       "polaczenie z rodzina",
+      "połączenie z rodziną",
       "rodzina",
-      "wspolne zamieszkanie"
+      "wspolne zamieszkanie",
+      "wspólne zamieszkanie",
+      "malzenstwo",
+      "małżeństwo",
+      "malzonek",
+      "małżonek",
+      "malzonka",
+      "małżonka",
+      "dziecko"
     ],
     "temporary_residence_general": [
       "pobyt czasowy",
+      "zezwolenie na pobyt",
       "zezwolenie na pobyt czasowy",
+      "karta pobytu",
       "wniosek o pobyt"
     ]
   },
