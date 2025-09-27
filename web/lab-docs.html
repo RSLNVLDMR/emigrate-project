@@ -11,14 +11,6 @@
     .grid2 {display:grid;grid-template-columns:1fr;gap:12px}
     @media (min-width:740px){ .grid2{grid-template-columns:1fr 1fr} }
     .mono{font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size:13px; line-height:1.4}
-    .tag{display:inline-block;border:1px solid var(--line);border-radius:999px;padding:2px 8px;margin-right:6px}
-    details > summary{cursor:pointer}
-    .pass{color:var(--ok)}
-    .fail{color:var(--danger)}
-    .uncertain{color:var(--warn)}
-    .small-muted{font-size:12px;color:var(--muted)}
-    .codeblock{white-space:pre-wrap; word-break:break-word; overflow-wrap:anywhere; background:var(--ink); border:1px solid var(--line); padding:12px; border-radius:12px}
-    .row-gap{display:flex;flex-direction:column;gap:8px}
     .pill{display:inline-flex;align-items:center;gap:6px;border:1px solid var(--line);border-radius:999px;padding:4px 10px;margin:2px 6px 2px 0}
     .pill .dot{width:8px;height:8px;border-radius:999px;background:var(--muted)}
     .pill.pass .dot{background:var(--ok)}
@@ -27,8 +19,12 @@
     .table{width:100%;border-collapse:collapse}
     .table th,.table td{border-top:1px solid var(--line);padding:8px;vertical-align:top}
     .table th{text-align:left;color:var(--muted);font-weight:600}
-    .hint{font-size:12px;color:var(--muted)}
+    .small-muted{font-size:12px;color:var(--muted)}
+    .codeblock{white-space:pre-wrap; word-break:break-word; overflow-wrap:anywhere; background:var(--ink); border:1px solid var(--line); padding:12px; border-radius:12px}
+    .row-gap{display:flex;flex-direction:column;gap:8px}
     .inline-flex{display:inline-flex;gap:8px;flex-wrap:wrap}
+    .hint{font-size:12px;color:var(--muted)}
+    .badge.warn{background:var(--warn);color:#0b0e11;border-radius:999px;padding:2px 8px;margin-left:8px}
   </style>
 </head>
 <body>
@@ -43,16 +39,17 @@
     </header>
 
     <div class="card">
-      <div class="p">Внутренний тест OCR/LLM-пайплайна по документам и правил проверки.</div>
-      <div class="hint">Сначала запусти Preview, чтобы понять, виден ли текстовый слой/рендер страниц.</div>
+      <div class="p">Внутренний тест OCR/LLM-пайплайна по документам и правилам проверки.</div>
+      <div class="hint">Если в PDF нет текстового слоя, мы автоматически включим OCR и расширенный разбор.</div>
     </div>
 
     <div class="card" style="margin-top:12px">
       <div class="h2">Входные параметры</div>
+
       <div class="row">
         <div class="col" style="flex:2">
-          <label class="small-muted">Тип документа (docType)</label>
-          <select id="docType" class="input">
+          <label class="small-muted">Тип документа (docType) <span class="badge warn">обязателен</span></label>
+          <select id="docType" class="input" required>
             <option value="">— выбирайте —</option>
           </select>
         </div>
@@ -61,6 +58,7 @@
           <input id="citizenship" class="input" placeholder="ua/by/ru/..." />
         </div>
       </div>
+
       <div class="row" style="margin-top:8px">
         <div class="col" style="flex:1">
           <label class="small-muted">Путь/основание (path)</label>
@@ -74,7 +72,7 @@
 
       <div class="row" style="margin-top:8px">
         <div class="col" style="flex:1">
-          <label class="small-muted">ФИО пользователя (для сверки имен)</label>
+          <label class="small-muted">ФИО пользователя (для сверки имен) <span class="badge warn">нужно для чека «ФИО совпадает»</span></label>
           <input id="userName" class="input" placeholder="Пример: Ivan Petrov" />
         </div>
       </div>
@@ -83,7 +81,7 @@
         <div class="col">
           <label class="small-muted">Файлы (1 PDF до 20 стр. или до 20 изображений, ≤ 30 MB)</label>
           <input id="fileInput" type="file" class="input" multiple accept="application/pdf,image/*" />
-          <small class="hint">Важно: для PDF загружайте ровно один файл.</small>
+          <small class="hint">Для PDF загружайте ровно один файл.</small>
         </div>
       </div>
 
@@ -93,6 +91,7 @@
           <label><input type="checkbox" id="previewDoOCR" /> OCR 1-й страницы (дороже)</label>
           <label><input type="checkbox" id="debugFullText" /> Полный OCR-текст (до 20k)</label>
           <label><input type="checkbox" id="debugInVerify" checked /> Debug в verify-document</label>
+          <label><input type="checkbox" id="compressImages" checked /> Сжать изображения до 2000px (JPEG)</label>
         </div>
       </div>
 
@@ -126,6 +125,11 @@
 
 <script>
 const $ = (s) => document.querySelector(s);
+const $$ = (s) => Array.from(document.querySelectorAll(s));
+
+const MAX_TOTAL_MB = 30;
+const MAX_IMG_COUNT = 20;
+
 const outPreview = $("#previewOut");
 const outVerify  = $("#verifyOut");
 const stPreview  = $("#previewStatus");
@@ -150,12 +154,12 @@ async function loadDocTypes(){
     const sel = $("#docType");
     const keys = Object.keys(js||{}).sort();
     for(const k of keys){ const o=document.createElement('option'); o.value=k; o.textContent=k; sel.appendChild(o); }
+    if(keys.includes('zalacznik1') && !sel.value) sel.value = 'zalacznik1';
   }catch(e){
     console.warn('doc_rules.json not found or invalid', e);
   }
 }
 
-// lang switch (минимальный)
 (function initLang(){
   const ls = $("#langSwitch");
   const cur = localStorage.lang || 'ru';
@@ -165,6 +169,75 @@ async function loadDocTypes(){
   }
 })();
 
+function calcTotalSize(files){
+  return Array.from(files||[]).reduce((s,f)=>s+f.size,0);
+}
+
+function isPdfOnly(files){
+  const arr = Array.from(files||[]);
+  return arr.length===1 && arr[0].type==='application/pdf';
+}
+
+function splitImages(files){
+  return Array.from(files||[]).filter(f=>f.type.startsWith('image/'));
+}
+
+async function compressImageFile(file, maxDim=2000, quality=0.8){
+  if(!file.type.startsWith('image/')) return file;
+  const bmp = await createImageBitmap(file).catch(()=>null);
+  if(!bmp) return file;
+  const {width, height} = bmp;
+  const scale = Math.min(1, maxDim/Math.max(width, height));
+  if(scale >= 1 && file.type==='image/jpeg') return file; // уже достаточно компактный
+  const canvas = document.createElement('canvas');
+  canvas.width = Math.round(width*scale);
+  canvas.height = Math.round(height*scale);
+  const ctx = canvas.getContext('2d');
+  ctx.drawImage(bmp, 0, 0, canvas.width, canvas.height);
+  const blob = await new Promise(res=> canvas.toBlob(res, 'image/jpeg', quality));
+  return new File([blob], file.name.replace(/\.(png|webp|heic|heif)$/i,'.jpg'), { type:'image/jpeg' });
+}
+
+async function maybeCompressImages(files){
+  if(!$("#compressImages").checked) return Array.from(files||[]);
+  const out = [];
+  for(const f of files){
+    if(f.type.startsWith('image/')){
+      const cf = await compressImageFile(f);
+      out.push(cf);
+    }else{
+      out.push(f);
+    }
+  }
+  return out;
+}
+
+async function safeFetchJSON(url, opts){
+  const r = await fetch(url, opts);
+  const text = await r.text(); // всегда читаем как текст
+  let js = null;
+  try { js = JSON.parse(text); } catch(e){
+    // не JSON — подготовим дружественное сообщение
+    let hint = '';
+    if(r.status===413) hint = 'Сервер отклонил запрос: слишком большой объём данных (413). Уменьшите размер PDF/изображений или включите сжатие.';
+    else if(r.status===502) hint = 'Промежуточный шлюз вернул 502. Попробуйте ещё раз или уменьшите нагрузку (OCR может быть тяжёлым).';
+    else if(r.status===504) hint = 'Истекло время ожидания (504). Попробуйте ещё раз, при необходимости — без «Полный OCR-текст».';
+    else if(text.startsWith('Request Entity Too Large')) hint = 'Слишком большой запрос: уменьшаем размер файлов.';
+    const err = new Error(`Сервер вернул не-JSON (HTTP ${r.status}). ${hint}`);
+    err.raw = text.slice(0, 2000);
+    err.httpStatus = r.status;
+    throw err;
+  }
+  if(!r.ok){
+    const err = new Error(js?.error || `HTTP ${r.status}`);
+    err.httpStatus = r.status;
+    err.payload = js;
+    throw err;
+  }
+  return js;
+}
+
+// ————— Preview —————
 async function runPreview(fd){
   stPreview.textContent = 'Выполняю preview…';
   outPreview.innerHTML = '';
@@ -172,12 +245,18 @@ async function runPreview(fd){
     const doOCR   = $("#previewDoOCR").checked;
     const fullTxt = $("#debugFullText").checked;
     if(doOCR){ fd.append('do_ocr', '1'); if(fullTxt) fd.append('ocr_full', '1'); }
-    const r = await fetch('/api/pdf-ocr-preview', { method:'POST', body: fd });
-    const js = await r.json();
-    if(!r.ok){ throw new Error(js?.error||('HTTP '+r.status)); }
+    fd.append('lang_hint','pl');
+
+    const js = await safeFetchJSON('/api/pdf-ocr-preview', { method:'POST', body: fd });
     stPreview.textContent = 'Готово.';
     const meta = js.meta||{};
     const smp  = js.sample||{};
+
+    if((meta.pdfParseLen||0)===0 && !$("#previewDoOCR").checked){
+      $("#previewDoOCR").checked = true;
+      $("#debugFullText").checked = true;
+    }
+
     outPreview.innerHTML = `
       <div class="kv">
         <div class="muted">pdf-parse len</div><div>${meta.pdfParseLen??0}</div>
@@ -201,7 +280,10 @@ async function runPreview(fd){
     `;
   }catch(e){
     stPreview.textContent = 'Ошибка';
-    outPreview.innerHTML = `<div class="codeblock mono" style="color:var(--danger)">${esc(e.message||e)}</div>`;
+    outPreview.innerHTML = `
+      <div class="codeblock mono" style="color:var(--danger)">${esc(e.message||e)}</div>
+      ${e.raw ? `<div class="codeblock mono" style="margin-top:8px">${esc(e.raw)}</div>` : ''}
+    `;
   }
 }
 
@@ -218,7 +300,7 @@ function renderVerify(js){
     : '<span class="small-muted">Нет проверок</span>';
 
   const fieldsRows = Object.keys(flds).length
-    ? Object.entries(flds).map(([k,v])=> `<tr><th>${esc(k)}</th><td>${esc(typeof v==='string'?v:JSON.stringify(v))}</td></tr>`).join('')
+    ? Object.entries(flds).map(([k,val])=> `<tr><th>${esc(k)}</th><td>${esc(typeof val==='string'?val:JSON.stringify(val))}</td></tr>`).join('')
     : `<tr><td colspan="2" class="small-muted">Поля не извлечены</td></tr>`;
 
   const debugBlock = Object.keys(dbg).length ? `
@@ -260,46 +342,87 @@ function renderVerify(js){
   `;
 }
 
+// ————— Verify —————
 async function runVerify(fd){
   stVerify.textContent = 'Проверяю документ…';
   outVerify.innerHTML = '';
   try{
-    // Передаём OCR-флаги и в verify, чтобы движок мог перечитать PDF
-    if($("#previewDoOCR").checked){
-      fd.append('do_ocr','1');
-      if($("#debugFullText").checked){ fd.append('ocr_full','1'); }
-    }
+    fd.append('do_ocr','1');
+    fd.append('ocr_full','1');
+    fd.append('lang_hint','pl');
     if($("#debugInVerify").checked){ fd.append('debug','1'); fd.append('debug_full','1'); }
 
-    const r = await fetch('/api/verify-document', { method:'POST', body: fd });
-    const js = await r.json();
-    if(!r.ok){ throw new Error(js?.error||('HTTP '+r.status)); }
+    const js = await safeFetchJSON('/api/verify-document', { method:'POST', body: fd });
     stVerify.textContent = 'Готово.';
     renderVerify(js);
   }catch(e){
     stVerify.textContent = 'Ошибка';
-    outVerify.innerHTML = `<div class="codeblock mono" style="color:var(--danger)">${esc(e.message||e)}</div>`;
+    outVerify.innerHTML = `
+      <div class="codeblock mono" style="color:var(--danger)">${esc(e.message||e)}</div>
+      ${e.raw ? `<div class="codeblock mono" style="margin-top:8px">${esc(e.raw)}</div>` : ''}
+      ${e.payload ? `<div class="codeblock mono" style="margin-top:8px">${esc(JSON.stringify(e.payload,null,2))}</div>` : ''}
+    `;
   }
 }
 
+// ————— Кнопка «Запустить проверку» —————
 $("#btnRun").onclick = async ()=>{
   const files = $("#fileInput").files;
   if(!files || !files.length){ alert('Выберите файл(ы)'); return; }
-  const fdPreview = new FormData();
-  const fdVerify  = new FormData();
 
-  // Общие поля
   const docType = $("#docType").value || '';
-  const citizenship = $("#citizenship").value || '';
-  const pathName = $("#pathName").value || '';
-  const applicationDate = $("#applicationDate").value || '';
-  const userName = $("#userName").value || '';
+  if(!docType){ alert('Выберите тип документа (docType)'); $("#docType").focus(); return; }
 
-  // Preview: только PDF (если выбран)
+  // Предупреждение по ФИО — чтобы не ловить ложный FAIL у names_match_user
+  const userName = ($("#userName").value || '').trim();
+  if(!userName){
+    if(!confirm('Вы не указали ФИО пользователя. Чек «ФИО совпадает» почти гарантированно провалится. Продолжить без ФИО?')){
+      $("#userName").focus(); return;
+    }
+  }
+
+  // Клиентская валидация объёма — до отправки!
+  const totalBytes = calcTotalSize(files);
+  if(totalBytes > MAX_TOTAL_MB*1024*1024){
+    if(!confirm(`Суммарный размер ${humanBytes(totalBytes)} превышает ${MAX_TOTAL_MB} MB. Включить сжатие изображений и продолжить?`)){
+      return;
+    }
+  }
+
+  // Подготовка наборов файлов (с возможным сжатием изображений)
+  let upFiles = Array.from(files);
+  if(splitImages(upFiles).length){
+    upFiles = await maybeCompressImages(upFiles);
+  }
+
+  // Повторная проверка размера после сжатия
+  const newTotal = upFiles.reduce((s,f)=>s+f.size,0);
+  if(newTotal > MAX_TOTAL_MB*1024*1024){
+    alert(`Даже после сжатия суммарный размер ${humanBytes(newTotal)} > ${MAX_TOTAL_MB} MB. Уменьшите разрешение/количество файлов.`);
+    return;
+  }
+
+  const imgs = splitImages(upFiles);
+  if(!isPdfOnly(upFiles) && imgs.length > MAX_IMG_COUNT){
+    alert(`Слишком много изображений (${imgs.length}). Допускается до ${MAX_IMG_COUNT}. Удалите лишние.`);
+    return;
+  }
+  if(!isPdfOnly(upFiles) && upFiles.some(f=>!f.type.startsWith('image/'))){
+    alert('В «режиме картинок» допускаются только изображения (PNG/JPG). Уберите PDF или оставьте ровно один PDF.');
+    return;
+  }
+  if(isPdfOnly(upFiles) && upFiles[0].size > MAX_TOTAL_MB*1024*1024){
+    alert('PDF слишком большой. Уменьшите разрешение/сожмите файл.');
+    return;
+  }
+
   const wantPreview = $("#wantPreview").checked;
+
+  // PREVIEW (только если PDF)
   if(wantPreview){
-    const pdf = Array.from(files).find(f=>f.type==='application/pdf');
+    const pdf = upFiles.length===1 && upFiles[0].type==='application/pdf' ? upFiles[0] : null;
     if(pdf){
+      const fdPreview = new FormData();
       fdPreview.append('file', pdf, pdf.name);
       await runPreview(fdPreview);
     } else {
@@ -311,13 +434,19 @@ $("#btnRun").onclick = async ()=>{
     outPreview.innerHTML = '';
   }
 
-  // Verify: принимает 1 PDF или до 20 изображений
-  for(const f of files){ fdVerify.append('file', f, f.name); }
-  if(docType) fdVerify.append('docType', docType);
-  if(citizenship) fdVerify.append('citizenship', citizenship);
-  if(pathName) fdVerify.append('path', pathName);
+  // VERIFY
+  const fdVerify  = new FormData();
+  for(const f of upFiles){ fdVerify.append('file', f, f.name); }
+
+  const citizenship = $("#citizenship").value || '';
+  const pathName = $("#pathName").value || '';
+  const applicationDate = $("#applicationDate").value || '';
+
+  fdVerify.append('docType', docType);
+  if(citizenship)     fdVerify.append('citizenship', citizenship);
+  if(pathName)        fdVerify.append('path', pathName);
   if(applicationDate) fdVerify.append('applicationDate', applicationDate);
-  if(userName) fdVerify.append('userName', userName);
+  if(userName)        fdVerify.append('userName', userName);
 
   await runVerify(fdVerify);
 };
