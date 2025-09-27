@@ -1,0 +1,11 @@
+[
+{
+"origin": [
+"https://your-app.vercel.app",
+"http://localhost:3000"
+],
+"method": ["PUT", "GET", "HEAD"],
+"responseHeader": ["Content-Type", "x-goog-resumable"],
+"maxAgeSeconds": 3600
+}
+]
