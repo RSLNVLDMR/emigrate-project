@@ -12,5 +12,8 @@
     "pdf-parse": "^1.1.1",
     "pdfjs-dist": "^4.7.76",
     "sharp": "^0.33.4"
+    "@google-cloud/documentai": "^3.2.1",
+    "@google-cloud/storage": "^7.10.0",
+    "google-auth-library": "^9.14.2"
   }
 }
