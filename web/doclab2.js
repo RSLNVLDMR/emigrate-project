@@ -73,4 +73,4 @@ async function post(url, data){
   try { return JSON.parse(txt); } catch { throw new Error(`Bad JSON from ${url}: ${txt.slice(0,200)}`); }
 }
 
-function esc(s){ return String(s||'').replace(/[&<>]/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]); }
+function esc(s){ return String(s||'').replace(/[&<>]/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c])); }
